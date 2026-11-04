@@ -29,7 +29,7 @@ part 'supabase/shift_market_supabase.dart';
 part 'supabase/admin_supabase.dart';
 
 /// Event columns the app reads. Listed (not `*`) because events.labor_budget is pay
-/// information: 0023 makes it unreadable from the table, and pay viewers get budgets
+/// information: 0024 makes it unreadable from the table, and pay viewers get budgets
 /// from report_labor_budgets().
 const eventReadColumns =
     'id, venue_id, name, event_type_code, start_time, call_time, doors_time, end_time, expected_attendance, actual_attendance, status, source, external_id, notes';

@@ -5,7 +5,9 @@
 --    now any venue member could read them from the tables (the app selected events with
 --    `*`). The app now lists its columns, so the budget columns are taken out of the
 --    table-level read grant here, and pay viewers read budgets through
---    report_labor_budgets(). Writing budgets is unchanged (0009: view_pay).
+--    report_labor_budgets(). Writing budgets is unchanged here (see 0025: events needs
+--    view_pay too). Any column added to these tables later needs its own `grant select
+--    (column)`, or it cannot be read.
 -- 2. event_board() returned the event row and its storefront rows with the budget in
 --    them; it now leaves the budget out.
 -- 3. report_worker_seasons(): how many events each person clocked in at, per season, so

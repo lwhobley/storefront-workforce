@@ -1,4 +1,4 @@
--- Reports (0015 targets, 0023 budgets and seasons). Self-contained; everything rolls back.
+-- Reports (0015 targets, 0024 budgets and seasons). Self-contained; everything rolls back.
 begin;
 
 -- ---- Fixtures (as the platform owner) --------------------------------------

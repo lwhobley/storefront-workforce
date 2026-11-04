@@ -1,7 +1,7 @@
 part of '../supabase_repository.dart';
 
 /// Supabase implementation of [ReportsRepository]. Reads go through row level
-/// security; labor budgets come from report_labor_budgets() (0023), which needs
+/// security; labor budgets come from report_labor_budgets() (0024), which needs
 /// view_pay, because the budget columns are not readable from the tables.
 mixin _SupabaseReports on _SupabaseCore implements ReportsRepository {
   static const _shiftColumns =
