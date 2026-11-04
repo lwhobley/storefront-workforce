@@ -32,27 +32,38 @@ class ScreenHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final heading = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (kicker != null) Text(kicker!.toUpperCase(), style: AppText.kicker),
+        if (kicker != null) const SizedBox(height: 4),
+        Semantics(header: true, child: Text(title, style: AppText.screenTitle)),
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(subtitle!, style: AppText.meta),
+        ],
+      ],
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpace.screen, AppSpace.l, AppSpace.screen, AppSpace.m),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Expanded(
-            child: Column(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // On phones, actions go under the title so neither gets squeezed.
+          if (actions.isNotEmpty && constraints.maxWidth < 560) {
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (kicker != null) Text(kicker!.toUpperCase(), style: AppText.kicker),
-                if (kicker != null) const SizedBox(height: 4),
-                Semantics(header: true, child: Text(title, style: AppText.screenTitle)),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 4),
-                  Text(subtitle!, style: AppText.meta),
-                ],
+                heading,
+                const SizedBox(height: AppSpace.m),
+                Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: actions),
               ],
-            ),
-          ),
-          ...actions,
-        ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [Expanded(child: heading), ...actions],
+          );
+        },
       ),
     );
   }

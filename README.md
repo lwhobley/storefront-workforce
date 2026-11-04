@@ -62,9 +62,9 @@ Cloudflare Pages project `storefront-workforce` (created on the first run), serv
 
 ```bash
 cd packages/workforce_core && dart test     # labor rules, pay engine, sample data (327)
-flutter test                                  # schedule, live board, demo flows
-supabase/tests/run_local.sh                   # database: isolation, scopes, schedule, punches, sync, pay (65)
-deno test --allow-env supabase/functions/_shared/pin_test.ts
+flutter test                                  # schedule, live board, pay, comms, shift market (42)
+supabase/tests/run_local.sh                   # database: isolation, scopes, schedule, punches, sync, pay, comms, shifts, people (330 checks)
+deno test --allow-env supabase/functions
 ```
 
 `run_local.sh` needs a local Postgres (set `PGHOST`, `PGPORT`, `PGUSER`).
