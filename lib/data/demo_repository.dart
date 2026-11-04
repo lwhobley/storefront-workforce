@@ -408,10 +408,14 @@ abstract class _DemoCore implements WorkforceRepository {
         return created;
       });
 
+  /// Flagged do not rehire (the performance part file keeps the flags).
+  bool _doNotRehire(String workerId) => false;
+
   /// Same hard checks as the database's assignment_block_reason().
   String? _blockReason(Worker w, Event e, String role, String shiftId) {
     final r = _arena.jobRoles.firstWhere((j) => j.code == role);
     if (w.status != 'active') return 'This person is inactive.';
+    if (_doNotRehire(w.id)) return 'This person is flagged do not rehire.';
     if (_shifts.values.any((s) => s.eventId == e.id && s.workerId == w.id && s.id != shiftId &&
         (s.status == ShiftStatus.assigned || s.status == ShiftStatus.released))) {
       return 'This person already has a position at this event.';
@@ -882,7 +886,9 @@ abstract class _DemoCore implements WorkforceRepository {
 
 /// The demo backend: the core above plus each Phase 3 area, in its own part file.
 class DemoWorkforceRepository extends _DemoCore with _DemoShiftMarket, _DemoComms, _DemoPeople, _DemoReports, _DemoPerformance, _DemoOperations {
-  DemoWorkforceRepository({super.now});
+  DemoWorkforceRepository({super.now}) {
+    _seedPerformanceDemo();
+  }
 
   static const personas = _DemoCore.personas;
   static String kioskPinFor(Worker w) => _DemoCore.kioskPinFor(w);
