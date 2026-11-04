@@ -239,6 +239,8 @@ select pg_temp.as_user('00000000-0000-0000-0000-000000002116');
 select pg_temp.expect_error($$select save_checklist_template(jsonb_build_object('venue_id', '00000000-0000-0000-0000-00000021aa01', 'kind', 'custom', 'name', 'Halftime', 'items', '[{"label": "Restock"}]'::jsonb))$$,
   'another venue cannot edit them');
 select pg_temp.as_user('00000000-0000-0000-0000-000000002111');
+select pg_temp.expect_error($$select save_checklist_template(jsonb_build_object('venue_id', '00000000-0000-0000-0000-00000021aa01', 'kind', 'custom', 'name', 'closing', 'items', '[{"label": "x"}]'::jsonb))$$,
+  'checklist names are unique (any case)');
 select save_checklist_template(jsonb_build_object('id', pg_temp.tpl('Opening'), 'venue_id', '00000000-0000-0000-0000-00000021aa01', 'kind', 'opening', 'name', 'Opening',
   'items', jsonb_build_array(jsonb_build_object('id', pg_temp.item('Opening', 'All staff clocked in'), 'label', 'Everyone clocked in'),
                              jsonb_build_object('label', 'Radios handed out', 'photo_required', true))));
@@ -369,7 +371,7 @@ select pg_temp.expect_error($$select add_incident_note(jsonb_build_object('id', 
   'a closed incident takes no notes');
 select pg_temp.expect((update_incident('00000000-0000-0000-0000-0000002110b1', 'following_up') ->> 'status') = 'following_up',
   'and can be reopened');
-select pg_temp.expect((select string_agg(kind, ',' order by created_at, id) from incident_notes where incident_id = '00000000-0000-0000-0000-0000002110b1') like 'assigned,status,status,status%',
+select pg_temp.expect((select string_agg(kind, ',' order by kind) from incident_notes where incident_id = '00000000-0000-0000-0000-0000002110b1') = 'assigned,status,status,status',
   'owner and status changes are on the timeline');
 select pg_temp.as_owner();
 select pg_temp.expect((select count(*) from audit_logs where entity = 'incidents' and reason = 'Reported to HR, back next shift') >= 1,

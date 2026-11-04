@@ -3,6 +3,8 @@
 /// is the sum of its events, an event the sum of its storefronts.
 library;
 
+import '../pay/money.dart';
+
 /// Counts behind the KPIs. Money is in cents; time in minutes.
 class KpiTotals {
   const KpiTotals({
@@ -155,7 +157,7 @@ class KpiTotals {
   /// Budget minus cost for the budgeted slices; null with no budget.
   int? get budgetVarianceCents => budgets == 0 ? null : budgetCents - budgetedCostCents;
 
-  int? get costPerAttendeeCents => attendees <= 0 ? null : (laborCents * 2 + attendees) ~/ (attendees * 2);
+  int? get costPerAttendeeCents => attendees <= 0 ? null : divRoundHalfUp(laborCents, attendees);
 
   bool get hasActivity => planned > 0 || expected > 0 || workedMinutes > 0;
 }

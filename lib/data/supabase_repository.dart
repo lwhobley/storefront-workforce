@@ -26,6 +26,12 @@ part 'supabase/performance_supabase.dart';
 part 'supabase/reports_supabase.dart';
 part 'supabase/shift_market_supabase.dart';
 
+/// Event columns the app reads. Listed (not `*`) because events.labor_budget is pay
+/// information: 0023 makes it unreadable from the table, and pay viewers get budgets
+/// from report_labor_budgets().
+const eventReadColumns =
+    'id, venue_id, name, event_type_code, start_time, call_time, doors_time, end_time, expected_attendance, actual_attendance, status, source, external_id, notes';
+
 /// The real backend. Every read goes through row level security, and every schedule
 /// change goes through a database function that checks scope and logs the change.
 abstract class _SupabaseCore implements WorkforceRepository {
@@ -183,7 +189,7 @@ abstract class _SupabaseCore implements WorkforceRepository {
   @override
   Future<List<Event>> listEvents(AppSession session) => _guard(() async {
         final since = DateTime.now().toUtc().subtract(const Duration(days: 120)).toIso8601String();
-        final rows = await client.from('events').select().eq('venue_id', session.venue.id).gte('start_time', since).order('start_time', ascending: true);
+        final rows = await client.from('events').select(eventReadColumns).eq('venue_id', session.venue.id).gte('start_time', since).order('start_time', ascending: true);
         return [for (final r in rows) Event.fromJson(r)];
       });
 
@@ -200,7 +206,7 @@ abstract class _SupabaseCore implements WorkforceRepository {
               'status': ?status?.code,
             })
             .eq('id', event.id)
-            .select()
+            .select(eventReadColumns)
             .single();
         return Event.fromJson(row);
       });
@@ -312,7 +318,7 @@ abstract class _SupabaseCore implements WorkforceRepository {
         final workerRow = await client.from('workers').select().eq('id', workerId).single();
         final rows = await client
             .from('shifts')
-            .select('*, events!inner(*), storefronts(*), stations(name), job_roles(name)')
+            .select('*, events!inner($eventReadColumns), storefronts(*), stations(name), job_roles(name)')
             .eq('worker_id', workerId)
             .inFilter('status', ['assigned', 'released'])
             .gte('call_time', since)
@@ -435,7 +441,7 @@ abstract class _SupabaseCore implements WorkforceRepository {
             .gte('occurred_at', from).lt('occurred_at', to).order('id', ascending: true).range(a, b));
         final shifts = await _all((a, b) => client.from('shifts').select().eq('venue_id', venueId)
             .gte('call_time', from).lt('call_time', to).order('id', ascending: true).range(a, b));
-        final events = await client.from('events').select().eq('venue_id', venueId).gte('start_time', from).lt('start_time', to);
+        final events = await client.from('events').select(eventReadColumns).eq('venue_id', venueId).gte('start_time', from).lt('start_time', to);
         final eventIds = [for (final e in events) e['id'] as String];
         final pools = eventIds.isEmpty ? <Map<String, dynamic>>[] : await client.from('tip_pools').select().inFilter('event_id', eventIds);
         final poolIds = [for (final p in pools) p['id'] as String];
@@ -521,7 +527,7 @@ abstract class _SupabaseCore implements WorkforceRepository {
             .inFilter('worker_id', ids).gte('occurred_at', f).lt('occurred_at', t).order('id', ascending: true).range(a, b));
         final shifts = await _all((a, b) => client.from('shifts').select().eq('venue_id', venueId)
             .gte('call_time', f).lt('call_time', t).order('id', ascending: true).range(a, b));
-        final events = await client.from('events').select().eq('venue_id', venueId).gte('start_time', f).lt('start_time', t);
+        final events = await client.from('events').select(eventReadColumns).eq('venue_id', venueId).gte('start_time', f).lt('start_time', t);
         final eventIds = [for (final e in events) e['id'] as String];
         final payouts = eventIds.isEmpty ? <Map<String, dynamic>>[] : await client.from('npo_payouts').select().inFilter('event_id', eventIds);
         return PartnerData(

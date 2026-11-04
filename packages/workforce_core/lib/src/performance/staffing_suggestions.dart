@@ -218,7 +218,8 @@ List<PastEventStaffing> similarEvents({
 }
 
 String _explain(List<PastEventStaffing> used, String noun) {
-  final crowds = [for (final e in used) e.attendance]..sort();
+  // Rounded to the nearest hundred for reading ("4,611" shows as "4,600").
+  final crowds = [for (final e in used) e.attendance >= 1000 ? (e.attendance / 100).round() * 100 : e.attendance]..sort();
   final lo = crowds.first, hi = crowds.last;
   final what = used.length == 1 ? '1 past ${_singular(noun)}' : '${used.length} past $noun';
   if (hi <= 0) return 'Based on $what.';

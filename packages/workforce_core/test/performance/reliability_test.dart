@@ -49,7 +49,7 @@ void main() {
       expect(s.score, 100);
       expect(s.events, 5);
       expect(s.isNew, isFalse);
-      expect(s.breakdown, '100 = 100 over 5 events');
+      expect(s.breakdown, 'Nothing taken off: on time at all 5 events.');
     });
 
     test('takes off the points for each no-show, call-off and late arrival', () {

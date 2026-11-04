@@ -735,6 +735,13 @@ begin
   if jsonb_array_length(p -> 'items') > 40 then
     raise exception 'Up to 40 items' using errcode = '22023';
   end if;
+  if length(btrim(coalesce(p ->> 'name', ''))) = 0 then
+    raise exception 'Give the checklist a name' using errcode = '22023';
+  end if;
+  if exists (select 1 from checklist_templates where venue_id = v_venue and lower(name) = lower(btrim(p ->> 'name'))
+             and id is distinct from v_id) then
+    raise exception 'A checklist with this name already exists' using errcode = '22023';
+  end if;
   if v_id is null then
     insert into checklist_templates (venue_id, kind, name, active, sort)
     values (v_venue, coalesce(p ->> 'kind', 'custom'), btrim(p ->> 'name'), coalesce((p ->> 'active')::boolean, true),

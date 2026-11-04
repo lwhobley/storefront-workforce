@@ -119,6 +119,7 @@ class ReliabilityScore {
   /// "100 − 25 (1 no-show) − 10 (2 late) = 65 over 6 events".
   String get breakdown {
     if (score == null) return 'No events in the past ${rules.windowDays == 365 ? 'year' : '${rules.windowDays} days'}.';
+    if (noShows + callOffs + lates == 0) return events == 1 ? 'Nothing taken off: on time at their 1 event.' : 'Nothing taken off: on time at all $events events.';
     final parts = <String>['100'];
     if (noShows > 0) parts.add('− $noShowPoints (${_n(noShows, 'no-show')})');
     if (callOffs > 0) parts.add('− $callOffPoints (${_n(callOffs, 'call-off')})');

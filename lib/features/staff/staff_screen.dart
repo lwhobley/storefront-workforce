@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:workforce_core/workforce_core.dart';
 
@@ -15,6 +16,7 @@ import '../people/people_logic.dart';
 import '../people/people_providers.dart';
 import '../people/people_widgets.dart';
 import '../people/pick_text_file.dart';
+import '../performance/performance_section.dart';
 import '../schedule/schedule_actions.dart';
 
 /// Staff directory with trained roles and certification status. Managers add people one
@@ -140,7 +142,19 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
               itemBuilder: (context, i) {
                 if (i == 0) {
                   return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    ScreenHeader(kicker: session.venue.name, title: 'Staff', subtitle: '${all.length} people · ${shown.length} shown'),
+                    ScreenHeader(
+                      kicker: session.venue.name,
+                      title: 'Staff',
+                      subtitle: '${all.length} people · ${shown.length} shown',
+                      actions: [
+                        if (session.canVenueWide(Perm.viewWorkers))
+                          OutlinedButton.icon(
+                            onPressed: () => context.push('/staff/rankings'),
+                            icon: const Icon(Icons.leaderboard_outlined),
+                            label: const Text('Rankings'),
+                          ),
+                      ],
+                    ),
                     if (canManage)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(AppSpace.screen, 0, AppSpace.screen, AppSpace.m),
@@ -347,6 +361,10 @@ class _PersonSheet extends ConsumerWidget {
           ),
         ]),
       ),
+      if (session.canVenueWide(Perm.viewWorkers)) ...[
+        SectionHeading('Performance'),
+        PerformanceSection(worker: w),
+      ],
       if (canManage) ...[
         SectionHeading('Sign-in'),
         Align(

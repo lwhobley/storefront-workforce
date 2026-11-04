@@ -5,7 +5,7 @@
 ///
 /// - two earlier seasons of completed events (the one before has a five-night
 ///   tournament, so some people reach weekly overtime), plus preseason games this
-///   season before the arena's first event, with a four-night tournament;
+///   season before the arena's first event, with a five-night tournament;
 /// - their staffing, schedule, punches (late arrivals, no-shows, short and missed
 ///   breaks), call-offs with replacements, and paid NPO payouts;
 /// - former staff (inactive) who worked earlier seasons, for turnover;
@@ -339,6 +339,10 @@ class _History {
       d = d.add(Duration(days: between(step.$1, step.$2)));
     }
     if (tournament != null) {
+      // Monday to Friday of one workweek, doubleheaders every night.
+      while (tournament!.weekday != DateTime.monday) {
+        tournament = tournament.add(const Duration(days: 1));
+      }
       for (var i = 0; i < 5; i++) {
         out.add((tournament.add(Duration(days: i)), 'hockey', _hockey('Winter Classic: ')));
       }
@@ -347,18 +351,23 @@ class _History {
   }
 
   /// Preseason games this season, before the arena's first event, ending with a
-  /// four-night tournament.
+  /// five-night tournament of doubleheaders.
   List<(DateTime, String, String)> _preseason() {
     final dates = [for (final e in arena.events) localDateOf(e.startTime, tz)]..sort();
     if (dates.isEmpty) return const [];
     final cutoff = dates.first.subtract(const Duration(days: 3));
     final earliest = s0.firstDay.add(const Duration(days: 14));
     final out = <(DateTime, String, String)>[];
-    for (var i = 0; i < 4; i++) {
-      final d = cutoff.subtract(Duration(days: i));
+    // Five doubleheader nights, Monday to Friday of one workweek.
+    var monday = cutoff.subtract(const Duration(days: 4));
+    while (monday.weekday != DateTime.monday) {
+      monday = monday.subtract(const Duration(days: 1));
+    }
+    for (var i = 0; i < 5; i++) {
+      final d = monday.add(Duration(days: i));
       if (!d.isBefore(earliest) && d.isBefore(today)) out.add((d, 'hockey', _hockey('Preseason Cup: ')));
     }
-    var d = cutoff.subtract(const Duration(days: 8));
+    var d = monday.subtract(const Duration(days: 5));
     while (!d.isBefore(earliest)) {
       if (d.isBefore(today)) out.add((d, 'hockey', _hockey('Preseason: ')));
       d = d.subtract(const Duration(days: 5));
@@ -378,7 +387,9 @@ class _History {
 
   void _event(DateTime date, String type, String name) {
     final weekend = date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
+    final doubleheader = name.contains('Cup: ') || name.contains('Classic: ');
     final (hour, length) = switch (type) {
+      _ when doubleheader => (16, 330),
       'family_show' => (14, 150),
       'concert' => (19, 195),
       _ => weekend ? (18, 165) : (19, 165),
@@ -702,17 +713,20 @@ class _History {
   // Budgets and payouts
 
   void _budgets(String eventId, List<Shift> eventShifts) {
-    final count = <String, int>{};
+    // Scheduled position-hours per storefront.
+    final minutes = <String, int>{};
     for (final s in eventShifts) {
       if (s.status == ShiftStatus.cancelled) continue;
-      count[s.storefrontId] = (count[s.storefrontId] ?? 0) + 1;
+      final end = s.scheduledEnd ?? s.callTime.add(const Duration(hours: 6));
+      minutes[s.storefrontId] = (minutes[s.storefrontId] ?? 0) + end.difference(s.callTime).inMinutes;
     }
-    if (count.isEmpty) return;
-    // About $90 a position for the night, with some events planned tight.
-    final total = count.values.fold(0, (a, b) => a + b);
-    eventBudgets[eventId] = ((total * 9000 * (0.9 + rng.nextDouble() * 0.24)) ~/ 5000) * 5000;
+    if (minutes.isEmpty) return;
+    // About $13 a scheduled position-hour, with some events planned tight.
+    int cents(int m, double f) => (m * 1300 * f / 60).round();
+    final total = minutes.values.fold(0, (a, b) => a + b);
+    eventBudgets[eventId] = (cents(total, 0.9 + rng.nextDouble() * 0.24) ~/ 5000) * 5000;
     storefrontBudgets[eventId] = {
-      for (final e in count.entries) e.key: ((e.value * 9000 * (0.88 + rng.nextDouble() * 0.28)) ~/ 1000) * 1000,
+      for (final e in minutes.entries) e.key: (cents(e.value, 0.88 + rng.nextDouble() * 0.28) ~/ 1000) * 1000,
     };
   }
 
