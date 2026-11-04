@@ -1,8 +1,16 @@
 // Delivery providers: Resend (email) and Firebase Cloud Messaging HTTP v1 (push). Each is configured only by its secrets; a missing secret means the channel is
 // recorded as not_configured and nothing is sent.
-import { type Claimed, emailContent, failure, type Result } from "./helpers.ts";
+//
+// Rate limits (429), provider errors (5xx), network errors and timeouts are temporary:
+// they come back as "retry: ..." so the notification is sent again after a backoff.
+import { type Attempt, type Claimed, emailContent, failure, retry } from "./helpers.ts";
 
 const TIMEOUT_MS = 15_000;
+
+/** HTTP statuses worth trying again later. */
+export function isTemporaryStatus(status: number): boolean {
+  return status === 429 || status === 408 || status >= 500;
+}
 
 export type Env = (name: string) => string | undefined;
 
@@ -14,12 +22,14 @@ export function resendConfig(env: Env) {
   return key && from ? { key, from, appUrl: env("APP_URL") ?? null } : null;
 }
 
-export async function sendEmail(cfg: NonNullable<ReturnType<typeof resendConfig>>, n: Claimed): Promise<Result> {
+export async function sendEmail(cfg: NonNullable<ReturnType<typeof resendConfig>>, n: Claimed): Promise<Attempt> {
   const content = emailContent(n, cfg.appUrl);
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json" },
+      // The notification id as the idempotency key: a retry after a lost response is
+      // not delivered twice.
+      headers: { Authorization: `Bearer ${cfg.key}`, "Content-Type": "application/json", "Idempotency-Key": n.id },
       body: JSON.stringify({ from: cfg.from, to: [n.email.trim()], subject: content.subject, text: content.text, html: content.html }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
@@ -27,10 +37,12 @@ export async function sendEmail(cfg: NonNullable<ReturnType<typeof resendConfig>
       await res.body?.cancel();
       return "sent";
     }
-    const body = await res.json().catch(() => ({})) as { message?: string };
-    return failure(`Resend ${res.status}: ${body.message ?? res.statusText}`);
+    const body = await res.json().catch(() => ({})) as { message?: string; name?: string };
+    const text = `Resend ${res.status}: ${body.message ?? res.statusText}`;
+    // 409 concurrent_idempotent_requests: the same email is still being sent.
+    return isTemporaryStatus(res.status) || body.name === "concurrent_idempotent_requests" ? retry(text) : failure(text);
   } catch (e) {
-    return failure(e);
+    return retry(e);
   }
 }
 
@@ -66,6 +78,18 @@ function pemToDer(pem: string): Uint8Array<ArrayBuffer> {
 
 let cachedToken: { value: string; expires: number } | null = null;
 
+/** For tests: forget the cached FCM access token. */
+export function resetFcmTokenCache() {
+  cachedToken = null;
+}
+
+/** An FCM sign-in failure; temporary when Google's token service is down or limiting. */
+class SignInError extends Error {
+  constructor(message: string, readonly temporary: boolean) {
+    super(message);
+  }
+}
+
 /** An OAuth access token for FCM, from the service account (signed JWT grant). */
 async function fcmAccessToken(account: ServiceAccount): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
@@ -87,16 +111,24 @@ async function fcmAccessToken(account: ServiceAccount): Promise<string> {
     ["sign"],
   );
   const signature = new Uint8Array(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(`${header}.${claims}`)));
-  const res = await fetch(tokenUri, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: `${header}.${claims}.${base64url(signature)}`,
-    }),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  if (!res.ok) throw new Error(`FCM sign-in failed (${res.status})`);
+  let res: Response;
+  try {
+    res = await fetch(tokenUri, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion: `${header}.${claims}.${base64url(signature)}`,
+      }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw new SignInError(`FCM sign-in failed: ${e instanceof Error ? e.message : String(e)}`, true);
+  }
+  if (!res.ok) {
+    await res.body?.cancel();
+    throw new SignInError(`FCM sign-in failed (${res.status})`, isTemporaryStatus(res.status));
+  }
   const body = await res.json() as { access_token: string; expires_in?: number };
   cachedToken = { value: body.access_token, expires: now + (body.expires_in ?? 3600) };
   return body.access_token;
@@ -106,15 +138,16 @@ async function fcmAccessToken(account: ServiceAccount): Promise<string> {
 export async function sendPush(
   cfg: NonNullable<ReturnType<typeof fcmConfig>>,
   n: Claimed,
-): Promise<{ results: Result[]; staleTokens: string[] }> {
+): Promise<{ results: Attempt[]; staleTokens: string[] }> {
   const staleTokens: string[] = [];
   let access: string;
   try {
     access = await fcmAccessToken(cfg.account);
   } catch (e) {
-    return { results: [failure(e)], staleTokens };
+    // Google being unavailable is temporary; a bad key or account is not.
+    return { results: [e instanceof SignInError && e.temporary ? retry(e) : failure(e)], staleTokens };
   }
-  const results: Result[] = [];
+  const results: Attempt[] = [];
   for (const device of n.push_tokens) {
     const message = {
       token: device.token,
@@ -143,9 +176,10 @@ export async function sendPush(
       if (res.status === 404 || code === "UNREGISTERED" || code === "INVALID_ARGUMENT" && /token/i.test(body.error?.message ?? "")) {
         staleTokens.push(device.token);
       }
-      results.push(failure(`FCM ${res.status}${code ? ` ${code}` : ""}`));
+      const text = `FCM ${res.status}${code ? ` ${code}` : ""}`;
+      results.push(isTemporaryStatus(res.status) ? retry(text) : failure(text));
     } catch (e) {
-      results.push(failure(e));
+      results.push(retry(e));
     }
   }
   return { results, staleTokens };

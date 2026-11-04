@@ -20,18 +20,22 @@ insert into auth.users (id) values
   ('00000000-0000-0000-0000-0000000c0006'), -- kiosk A
   ('00000000-0000-0000-0000-0000000c0007'), -- lead A, storefront 102
   ('00000000-0000-0000-0000-0000000c0008'), -- employee A, temp bartender, not working
-  ('00000000-0000-0000-0000-0000000c0009'); -- employee B
+  ('00000000-0000-0000-0000-0000000c0009'), -- employee B
+  ('00000000-0000-0000-0000-0000000c000a'), -- NPO coordinator at venue A (partner, no staff record)
+  ('00000000-0000-0000-0000-0000000c000b'); -- temp agency contact at venue A (partner, no staff record)
 insert into user_profiles (id, display_name, kind, preferred_language) values
   ('00000000-0000-0000-0000-0000000c0001', 'Marcus Bell', 'person', 'en'),
   ('00000000-0000-0000-0000-0000000c0002', 'Lia Lead', 'person', 'en'),
   ('00000000-0000-0000-0000-0000000c0003', 'Ana Reyes', 'person', 'es'),
-  ('00000000-0000-0000-0000-0000000c0006', 'Kiosk', 'kiosk', 'en');
+  ('00000000-0000-0000-0000-0000000c0006', 'Kiosk', 'kiosk', 'en'),
+  ('00000000-0000-0000-0000-0000000c000a', 'Nora Npo', 'person', 'en'),
+  ('00000000-0000-0000-0000-0000000c000b', 'Abe Agency', 'person', 'en');
 
 insert into venue_memberships (venue_id, user_id)
 select '00000000-0000-0000-0000-0000000ca001', u::uuid from unnest(array[
   '00000000-0000-0000-0000-0000000c0001', '00000000-0000-0000-0000-0000000c0002', '00000000-0000-0000-0000-0000000c0003',
   '00000000-0000-0000-0000-0000000c0004', '00000000-0000-0000-0000-0000000c0006', '00000000-0000-0000-0000-0000000c0007',
-  '00000000-0000-0000-0000-0000000c0008']) u;
+  '00000000-0000-0000-0000-0000000c0008', '00000000-0000-0000-0000-0000000c000a', '00000000-0000-0000-0000-0000000c000b']) u;
 insert into venue_memberships (venue_id, user_id) values
   ('00000000-0000-0000-0000-0000000cb001', '00000000-0000-0000-0000-0000000c0005'),
   ('00000000-0000-0000-0000-0000000cb001', '00000000-0000-0000-0000-0000000c0009');
@@ -64,6 +68,9 @@ insert into role_assignments (venue_id, user_id, role_code, scope_type, scope_id
 
 insert into temp_agencies (id, venue_id, name) values
   ('00000000-0000-0000-0000-0000000cac01', '00000000-0000-0000-0000-0000000ca001', 'Agency One');
+insert into role_assignments (venue_id, user_id, role_code, scope_type, scope_id) values
+  ('00000000-0000-0000-0000-0000000ca001', '00000000-0000-0000-0000-0000000c000a', 'npo_coordinator', 'venue', null),
+  ('00000000-0000-0000-0000-0000000ca001', '00000000-0000-0000-0000-0000000c000b', 'agency_contact', 'agency', '00000000-0000-0000-0000-0000000cac01');
 insert into workers (id, venue_id, worker_type, employee_number, first_name, last_name, date_of_birth, user_id, agency_id, phone, email, preferred_language) values
   ('00000000-0000-0000-0000-0000000cc001', '00000000-0000-0000-0000-0000000ca001', 'regular', 'E1', 'Ana', 'Reyes', '1995-04-02', '00000000-0000-0000-0000-0000000c0003', null, '(512) 555-0101', 'ana@example.com', 'es'),
   ('00000000-0000-0000-0000-0000000cc002', '00000000-0000-0000-0000-0000000ca001', 'regular', 'E2', 'Ben', 'Young', '1990-06-01', '00000000-0000-0000-0000-0000000c0004', null, '', '', 'en'),
@@ -168,7 +175,11 @@ select pg_temp.expect_error(format($$select pg_temp.send('{"venue_id": "00000000
 -- ---- Visibility per audience -------------------------------------------------------
 select pg_temp.as_owner();
 select pg_temp.expect((select recipient_count from messages where id = (select id from ids where name = 'everyone')) = 5,
-  'everyone reaches the five people at venue A (not the sender, not the kiosk)');
+  'everyone reaches the five people at venue A (not the sender, not the kiosk, not partner contacts)');
+select pg_temp.expect(not exists (select 1 from notifications where user_id in ('00000000-0000-0000-0000-0000000c000a', '00000000-0000-0000-0000-0000000c000b')),
+  'NPO coordinators and agency contacts are not notified of staff messages');
+select pg_temp.expect(public.comms_is_person('00000000-0000-0000-0000-0000000ca001', '00000000-0000-0000-0000-0000000c0001'),
+  'a manager without a staff record still reads messages');
 select pg_temp.expect((select recipient_count from messages where id = (select id from ids where name = 'sf101')) = 2,
   'a storefront message reaches its worker and its lead');
 select pg_temp.expect((select recipient_count from messages where id = (select id from ids where name = 'level_main')) = 4,
@@ -201,6 +212,11 @@ select pg_temp.expect((select count(*) from messages) = 6, 'the venue manager se
 
 select pg_temp.as_user('00000000-0000-0000-0000-0000000c0006');
 select pg_temp.expect((select count(*) from messages) = 0, 'a kiosk sees no messages');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000c000a');
+select pg_temp.expect((select count(*) from messages) = 0 and jsonb_array_length(my_messages(50)) = 0,
+  'an NPO coordinator sees no staff messages');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000c000b');
+select pg_temp.expect((select count(*) from messages) = 0, 'an agency contact sees no staff messages');
 
 select pg_temp.as_user('00000000-0000-0000-0000-0000000c0005');
 select pg_temp.expect((select count(*) from messages) = 0, 'manager B sees no venue A messages');
@@ -292,6 +308,9 @@ select pg_temp.as_user('00000000-0000-0000-0000-0000000c0008');  -- temp bartend
 select pg_temp.expect((select count(*) from announcements) = 3, 'a temp bartender sees all three');
 select pg_temp.as_user('00000000-0000-0000-0000-0000000c0009');
 select pg_temp.expect((select count(*) from announcements) = 0, 'venue B staff see no venue A announcements');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000c000a');
+select pg_temp.expect((select count(*) from announcements) = 0 and jsonb_array_length(my_announcements()) = 0,
+  'an NPO coordinator gets no venue-wide announcements');
 
 select pg_temp.as_user('00000000-0000-0000-0000-0000000c0001');
 select pg_temp.expect((select jsonb_array_length(announcement_ack_report((select id from ids where name = 'policy')) -> 'people')) = 2,
@@ -303,6 +322,12 @@ select pg_temp.expect((announcement_ack_report((select id from ids where name = 
 select pg_temp.expect((select (a ->> 'audience_count')::int = 2 and (a ->> 'ack_count')::int = 1
   from jsonb_array_elements(announcement_summaries('00000000-0000-0000-0000-0000000ca001')) a
   where a ->> 'id' = (select id from ids where name = 'policy')::text), 'the summary counts 1 of 2 acknowledged');
+select pg_temp.expect(not exists (select 1 from jsonb_array_elements(announcement_ack_report((select id from ids where name = 'general')) -> 'people') p
+  where p ->> 'user_id' in ('00000000-0000-0000-0000-0000000c000a', '00000000-0000-0000-0000-0000000c000b')),
+  'partner contacts are not listed in an everyone announcement''s report');
+select pg_temp.expect((select (a ->> 'audience_count')::int from jsonb_array_elements(announcement_summaries('00000000-0000-0000-0000-0000000ca001')) a
+  where a ->> 'id' = (select id from ids where name = 'general')::text) = 6,
+  'an everyone announcement counts the six staff and managers, not partner contacts or the kiosk');
 select pg_temp.expect(remind_unacknowledged((select id from ids where name = 'policy')) = 1, 'a reminder goes to the one who has not acknowledged');
 select pg_temp.expect(remind_unacknowledged((select id from ids where name = 'policy')) = 0, 'a second reminder in the same hour is not sent');
 select pg_temp.expect_error($$select remind_unacknowledged((select id from ids where name = 'general'))$$,
@@ -325,8 +350,18 @@ select pg_temp.as_user('00000000-0000-0000-0000-0000000c0001');
 insert into storage.objects (bucket_id, name) values ('documents', '00000000-0000-0000-0000-0000000ca001/announcements/alcohol.pdf');
 select pg_temp.expect_error($$insert into storage.objects (bucket_id, name) values ('documents', '00000000-0000-0000-0000-0000000cb001/announcements/x.pdf')$$,
   'a manager cannot upload to another venue');
+insert into storage.objects (bucket_id, name) values ('documents', '00000000-0000-0000-0000-0000000ca001/announcements/draft.pdf');
+select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'documents') = 2, 'managers open every announcement document');
 select pg_temp.as_user('00000000-0000-0000-0000-0000000c0003');
-select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'documents') = 1, 'members can open the venue''s documents');
+select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'documents') = 1
+  and (select name from storage.objects where bucket_id = 'documents') like '%/alcohol.pdf',
+  'a bartender opens the bartenders'' policy document, not an unattached upload');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000c0004');
+select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'documents') = 0,
+  'a cashier cannot open a policy meant for bartenders');
+select pg_temp.as_user('00000000-0000-0000-0000-0000000c000b');
+select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'documents') = 0,
+  'an agency contact cannot open announcement documents');
 select pg_temp.as_user('00000000-0000-0000-0000-0000000c0009');
 select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'documents') = 0, 'other venues cannot');
 
@@ -364,6 +399,35 @@ select pg_temp.expect(exists (select 1 from push_tokens where token = 'tok-ana')
 select pg_temp.as_user('00000000-0000-0000-0000-0000000c0001');
 select pg_temp.expect_error($$select queue_scheduled_notifications()$$, 'signed-in users cannot run the scheduler');
 select pg_temp.as_owner();
+-- Venue time zones must be real zones from now on.
+select pg_temp.expect_error($$update venues set time_zone = 'Central Time' where id = '00000000-0000-0000-0000-0000000ca001'$$,
+  'an unknown venue time zone is refused');
+select pg_temp.expect_error($$insert into venues (organization_id, name, time_zone) values ('00000000-0000-0000-0000-00000000c0a1', 'X', 'CST Zone')$$,
+  'a new venue needs a real time zone');
+update venues set time_zone = 'America/Denver' where id = '00000000-0000-0000-0000-0000000cb001';
+update venues set time_zone = 'America/Chicago' where id = '00000000-0000-0000-0000-0000000cb001';
+-- Venue B has bad data from before the check (a made-up zone and a reminder setting that is
+-- not a number); venue A has a bad missed clock-in setting. Neither stops venue A's reminders.
+alter table venues disable trigger venues_check_time_zone;
+update venues set time_zone = 'Central Time', settings = '{"notifications": {"call_reminder_minutes": "2h"}}'
+ where id = '00000000-0000-0000-0000-0000000cb001';
+alter table venues enable trigger venues_check_time_zone;
+update venues set name = 'Comms Arena B' where id = '00000000-0000-0000-0000-0000000cb001';
+select pg_temp.expect(true, 'a venue with an old bad time zone can still be edited');
+update venues set settings = '{"notifications": {"missed_clock_in_minutes": "15 min"}, "attendance": {"late_grace_minutes": 5}}'
+ where id = '00000000-0000-0000-0000-0000000ca001';
+insert into shifts (id, venue_id, event_id, storefront_id, job_role_code, worker_id, call_time, status) values
+  ('00000000-0000-0000-0000-0000000cfb01', '00000000-0000-0000-0000-0000000cb001', '00000000-0000-0000-0000-0000000ce0b1',
+   '00000000-0000-0000-0000-0000000c0b01', 'cashier', '00000000-0000-0000-0000-0000000cc0b1', '2026-11-19 22:30+00', 'assigned');
+select pg_temp.expect((queue_scheduled_notifications('2026-11-19 20:35+00') ->> 'venues_failed')::int = 0,
+  'bad venue settings fall back to the defaults instead of failing the run');
+select pg_temp.expect(exists (select 1 from notifications where kind = 'call_time' and user_id = '00000000-0000-0000-0000-0000000c0009'
+  and title = 'Call time 4:30 PM at B Stand 101'), 'the venue with the bad zone and setting still gets its reminder, in the default zone');
+delete from notifications where venue_id = '00000000-0000-0000-0000-0000000cb001';
+delete from notification_keys where key like 'call_time:00000000-0000-0000-0000-0000000cfb01:%';
+delete from shifts where id = '00000000-0000-0000-0000-0000000cfb01';
+delete from notifications where kind = 'call_time';
+delete from notification_keys where key like 'call_time:%';
 select pg_temp.expect((queue_scheduled_notifications('2026-11-19 20:35+00') ->> 'call_time')::int = 3,
   'call-time reminders go to the three assigned people about 2 hours before');
 select pg_temp.expect((queue_scheduled_notifications('2026-11-19 20:50+00') ->> 'call_time')::int = 0, 'call-time reminders are sent once');
@@ -396,6 +460,9 @@ select pg_temp.expect((queue_scheduled_notifications('2026-11-21 12:00+00') ->> 
 select pg_temp.expect((queue_scheduled_notifications('2026-11-24 12:00+00') ->> 'cert_expiring')::int = 1, 'and come again the next week');
 select pg_temp.expect(not exists (select 1 from notifications n where n.venue_id = '00000000-0000-0000-0000-0000000cb001'),
   'nothing is queued for venue B');
+alter table venues disable trigger venues_check_time_zone;
+update venues set time_zone = 'America/Chicago', settings = '{}' where id = '00000000-0000-0000-0000-0000000cb001';
+alter table venues enable trigger venues_check_time_zone;
 
 -- ---- Delivery claims (notify-dispatch) --------------------------------------------------
 select pg_temp.as_user('00000000-0000-0000-0000-0000000c0001');
@@ -412,16 +479,77 @@ select pg_temp.expect((select b -> 'push_tokens' -> 0 ->> 'token' = 'tok-shared'
   where b ->> 'user_id' = '00000000-0000-0000-0000-0000000c0004' limit 1), 'a claim carries the person''s device tokens');
 select pg_temp.expect((select (b ->> 'urgent')::boolean from batch where b -> 'data' ->> 'message_id' = (select id from ids where name = 'lead_help')::text limit 1),
   'urgent messages are marked urgent for quiet hours');
-select record_notification_results((select jsonb_agg(jsonb_build_object('id', b ->> 'id', 'sent', jsonb_build_object('push', 'not_configured'))) from batch));
+select pg_temp.expect((select bool_and(b ->> 'claim' is not null and (b ->> 'attempt')::int = 1 and (b ->> 'max_attempts')::int = 5
+  and b -> 'done' = '{}') from batch), 'a claim carries its token, the attempt number, and the attempt limit');
+select pg_temp.expect(record_notification_results((select jsonb_agg(jsonb_build_object('id', b ->> 'id', 'sent', jsonb_build_object('push', 'x'))) from batch)) = 0,
+  'results without the claim token are ignored');
+select record_notification_results((select jsonb_agg(jsonb_build_object('id', b ->> 'id', 'claim', b ->> 'claim', 'sent', jsonb_build_object('push', 'not_configured'))) from batch));
 select pg_temp.expect((select count(*) from notifications where sent = '{"push": "not_configured"}') = (select count(*) from batch),
   'delivery results are recorded per channel');
-update notifications set sent = '{}' where id = (select (b ->> 'id')::uuid from batch limit 1);
-select record_notification_results(jsonb_build_array(jsonb_build_object('id', (select b ->> 'id' from batch limit 1), 'deliver_after', now() + interval '1 hour')));
+select pg_temp.expect(record_notification_results((select jsonb_agg(jsonb_build_object('id', b ->> 'id', 'claim', b ->> 'claim', 'sent', jsonb_build_object('push', 'sent'))) from batch)) = 0,
+  'a finished notification is not written again');
+update notifications set sent = '{}', delivery_attempts = 0 where id = (select (b ->> 'id')::uuid from batch limit 1);
+create temp table one as select b from jsonb_array_elements(claim_notification_batch(500)) b;
+select pg_temp.expect(record_notification_results(jsonb_build_array(jsonb_build_object('id', (select b ->> 'id' from one), 'claim', (select b ->> 'claim' from one),
+  'deliver_after', now() + interval '1 hour'))) = 1, 'quiet hours put a claimed notification off');
+select pg_temp.expect((select delivery_attempts from notifications where deliver_after is not null) = 0, 'waiting for quiet hours does not use up an attempt');
 select pg_temp.expect(jsonb_array_length(claim_notification_batch(500)) = 0, 'a deferred notification waits for its time');
 update notifications set deliver_after = now() - interval '1 minute' where deliver_after is not null;
 select pg_temp.expect(jsonb_array_length(claim_notification_batch(500)) = 1, 'and is claimed after it');
 update notifications set sent = '{}', created_at = now() - interval '2 days' where deliver_after is not null;
 select pg_temp.expect(jsonb_array_length(claim_notification_batch(500)) = 0, 'notifications older than a day are not sent');
 select pg_temp.expect((select sent ->> 'expired' from notifications where deliver_after is not null) = 'true', 'they are marked expired');
+
+-- One fresh notification to follow through retries and lost claims.
+select notify_user('00000000-0000-0000-0000-0000000ca001', '00000000-0000-0000-0000-0000000c0003', 'message', 'Retry me', '', '/inbox',
+  array['in_app', 'push', 'email'], '{"t": "retry"}');
+create or replace function pg_temp.retry_row() returns notifications language sql as $$
+  select * from notifications where data ->> 't' = 'retry';
+$$;
+-- Makes the current claim look 11 minutes old, as if its dispatcher died.
+create or replace function pg_temp.age_claim() returns void language sql as $$
+  update notifications set sent = jsonb_set(sent, '{_claimed_at}', to_jsonb(now() - interval '11 minutes')) where data ->> 't' = 'retry';
+$$;
+create temp table c1 as select b from jsonb_array_elements(claim_notification_batch(500)) b;
+select pg_temp.expect((select count(*) from c1) = 1 and (select (b ->> 'attempt')::int from c1) = 1, 'the new notification is claimed (attempt 1)');
+select pg_temp.expect(record_notification_results(jsonb_build_array(jsonb_build_object('id', (select b ->> 'id' from c1), 'claim', (select b ->> 'claim' from c1),
+  'retry', '{"email": "retry: Resend 503"}'::jsonb, 'done', '{"push": "sent"}'::jsonb, 'deliver_after', now() - interval '1 second'))) = 1,
+  'a temporary failure is recorded as a retry');
+select pg_temp.expect((pg_temp.retry_row()).sent = '{"_pending": true, "_done": {"push": "sent"}}', 'the retry keeps the channel already sent');
+create temp table c2 as select b from jsonb_array_elements(claim_notification_batch(500)) b;
+select pg_temp.expect((select (b ->> 'attempt')::int = 2 and b -> 'done' = '{"push": "sent"}' from c2), 'the retry is claimed again with what was already done');
+
+-- The second dispatcher dies; its claim goes stale and a third run takes the row.
+select pg_temp.age_claim();
+create temp table c3 as select b from jsonb_array_elements(claim_notification_batch(500)) b;
+select pg_temp.expect((select (b ->> 'attempt')::int from c3) = 3 and (select b ->> 'claim' from c3) <> (select b ->> 'claim' from c2),
+  'a lost claim is released and claimed again, counting the attempt');
+select pg_temp.expect(record_notification_results(jsonb_build_array(jsonb_build_object('id', (select b ->> 'id' from c2), 'claim', (select b ->> 'claim' from c2),
+  'sent', '{"email": "failed: late"}'::jsonb))) = 0, 'the stale dispatcher cannot overwrite the new claim');
+select pg_temp.expect((pg_temp.retry_row()).sent ->> '_claim' = (select b ->> 'claim' from c3), 'the row still belongs to the new claim');
+
+-- Claimed and never written back, again and again: it gives up after the attempt limit.
+select pg_temp.age_claim();
+select pg_temp.expect(jsonb_array_length(claim_notification_batch(500)) = 1, 'attempt 4');
+select pg_temp.age_claim();
+select pg_temp.expect(jsonb_array_length(claim_notification_batch(500)) = 1, 'attempt 5');
+select pg_temp.age_claim();
+select pg_temp.expect(jsonb_array_length(claim_notification_batch(500)) = 0, 'no sixth attempt');
+select pg_temp.expect((pg_temp.retry_row()).sent = '{"push": "sent", "email": "failed: gave up after 5 attempts"}',
+  'after the last attempt it is marked failed, keeping what was sent');
+select pg_temp.expect(jsonb_array_length(claim_notification_batch(500)) = 0, 'and is never handed out again');
+
+-- A claim from more than a day ago that was never written back expires.
+update notifications set sent = jsonb_build_object('_claimed_at', now() - interval '2 days', '_claim', gen_random_uuid(), '_done', '{}'::jsonb),
+       delivery_attempts = 1, created_at = now() - interval '2 days'
+ where data ->> 't' = 'retry';
+select pg_temp.expect(jsonb_array_length(claim_notification_batch(500)) = 0, 'an old claimed notification is not claimed again');
+select pg_temp.expect((pg_temp.retry_row()).sent = '{"push": "expired", "email": "expired", "expired": true}', 'it is marked expired');
+
+-- Only notifications from the last day are handed out, even if they are waiting for a retry.
+update notifications set sent = '{"_pending": true, "_done": {}}', delivery_attempts = 1, created_at = now() - interval '25 hours'
+ where data ->> 't' = 'retry';
+select pg_temp.expect(jsonb_array_length(claim_notification_batch(500)) = 0, 'a retry older than a day is not sent');
+select pg_temp.expect((pg_temp.retry_row()).sent ->> 'expired' = 'true', 'it expires instead');
 
 rollback;

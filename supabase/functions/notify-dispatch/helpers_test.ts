@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertFalse } from "jsr:@std/assert@1";
 import {
   appLink,
+  backoffMs,
   type Claimed,
   combinePush,
   emailContent,
@@ -8,8 +9,12 @@ import {
   isEmail,
   localMinutes,
   planDelivery,
+  processBatch,
   quietUntil,
+  safeTimeZone,
+  settle,
   truncate,
+  zonedInstant,
 } from "./helpers.ts";
 
 Deno.test("email addresses: real ones pass, sign-in placeholders do not", () => {
@@ -88,6 +93,10 @@ function claimed(over: Partial<Claimed> = {}): Claimed {
     email: "ana@example.com",
     prefs: { push: true, email: true, quiet_start: null, quiet_end: null },
     push_tokens: [{ token: "t", platform: "android" }],
+    claim: "c1",
+    attempt: 1,
+    max_attempts: 5,
+    done: {},
     ...over,
   };
 }
@@ -131,4 +140,81 @@ Deno.test("push results combine across devices", () => {
   assertEquals(combinePush(["failed: FCM 404 UNREGISTERED", "sent"]), "sent");
   assertEquals(combinePush(["failed: FCM 500"]), "failed: FCM 500");
   assertEquals(combinePush([]), "no_contact");
+});
+
+Deno.test("an unknown time zone falls back to the venue default", () => {
+  assertEquals(safeTimeZone("America/New_York"), "America/New_York");
+  assertEquals(safeTimeZone("Central Time"), "America/Chicago");
+  assertEquals(safeTimeZone(""), "America/Chicago");
+  assertEquals(safeTimeZone(null), "America/Chicago");
+  const at = new Date("2026-11-20T03:30:00Z");
+  assertEquals(localMinutes(at, "Central Time"), localMinutes(at, "America/Chicago"));
+  // Quiet hours still work, in the default zone, instead of throwing.
+  const prefs = { push: true, email: true, quiet_start: "23:00", quiet_end: "07:00" };
+  const night = new Date("2026-11-20T06:00:00Z");
+  assertEquals(planDelivery(claimed({ prefs, time_zone: "Central Time" }), all, night).deferUntil?.toISOString(),
+    "2026-11-20T13:00:00.000Z");
+});
+
+Deno.test("quiet hours end at the local time across daylight-saving changes", () => {
+  const tz = "America/Chicago";
+  // Spring forward (Mar 8, 2026): 1:00 AM CST, quiet until 7:00 AM CDT, five real hours later.
+  assertEquals(quietUntil(new Date("2026-03-08T07:00:00Z"), tz, "23:00", "07:00")?.toISOString(), "2026-03-08T12:00:00.000Z");
+  // Fall back (Nov 1, 2026): 1:00 AM CDT, quiet until 7:00 AM CST, seven real hours later.
+  assertEquals(quietUntil(new Date("2026-11-01T06:00:00Z"), tz, "23:00", "07:00")?.toISOString(), "2026-11-01T13:00:00.000Z");
+  // An end inside the skipped hour (2:30 AM) is when the clocks reach it: 3:00 AM CDT.
+  assertEquals(quietUntil(new Date("2026-03-08T07:30:00Z"), tz, "01:00", "02:30")?.toISOString(), "2026-03-08T08:00:00.000Z");
+  // A repeated hour resolves to its first occurrence.
+  assertEquals(zonedInstant(Date.UTC(2026, 10, 1, 1, 30), tz).toISOString(), "2026-11-01T06:30:00.000Z");
+});
+
+Deno.test("plan: channels finished on an earlier attempt are not sent again", () => {
+  const p = planDelivery(claimed({ done: { push: "sent" } }), all, noon);
+  assertEquals(p.send, ["email"]);
+  assertEquals(p.results, {});
+});
+
+Deno.test("settle: temporary failures retry after a backoff, then give up", () => {
+  const at = new Date("2026-11-20T18:00:00Z");
+  const first = settle(claimed(), { push: "sent", email: "retry: Resend 503: busy" }, at);
+  assertEquals(first.sent, undefined);
+  assertEquals(first.claim, "c1");
+  assertEquals(first.retry, { email: "retry: Resend 503: busy" });
+  assertEquals(first.done, { push: "sent" });
+  assertEquals(first.deliver_after, new Date(at.getTime() + backoffMs(1)).toISOString());
+  assert(backoffMs(2) > backoffMs(1) && backoffMs(10) === 30 * 60_000);
+
+  const last = settle(claimed({ attempt: 5, done: { push: "sent" } }), { email: "retry: Resend 503: busy" }, at);
+  assertEquals(last.sent, { push: "sent", email: "failed: Resend 503: busy (gave up after 5 attempts)" });
+  assertEquals(last.deliver_after, undefined);
+
+  assertEquals(settle(claimed(), { push: "sent", email: "failed: Resend 422: bad" }, at).sent,
+    { push: "sent", email: "failed: Resend 422: bad" });
+});
+
+Deno.test("push results prefer sent, then a retry", () => {
+  assertEquals(combinePush(["retry: FCM 503", "sent"]), "sent");
+  assertEquals(combinePush(["failed: FCM 404 UNREGISTERED", "retry: FCM 503"]), "retry: FCM 503");
+});
+
+Deno.test("batch: one row that throws is failed alone; the rest are still recorded", async () => {
+  const rows = [claimed({ id: "a" }), claimed({ id: "boom" }), claimed({ id: "c" }), claimed({ id: "busy" })];
+  const { updates, counts } = await processBatch(rows, all, {
+    email: (n) => {
+      if (n.id === "boom") return Promise.reject(new Error("unexpected"));
+      return Promise.resolve(n.id === "busy" ? "retry: Resend 429: slow down" : "sent");
+    },
+    push: () => Promise.resolve({ results: ["sent"], staleTokens: [] }),
+  }, () => noon, 2);
+  const byId = Object.fromEntries(updates.map((u) => [u.id, u]));
+  assertEquals(updates.length, 4);
+  assertEquals(byId.a.sent, { push: "sent", email: "sent" });
+  assertEquals(byId.c.sent, { push: "sent", email: "sent" });
+  assertEquals(byId.boom.sent, { push: "failed: unexpected", email: "failed: unexpected" });
+  assertEquals(byId.busy.retry, { email: "retry: Resend 429: slow down" });
+  assertEquals(byId.busy.done, { push: "sent" });
+  assert(updates.every((u) => u.claim === "c1"));
+  assertEquals(counts.errors, 1);
+  assertEquals(counts.retry, 1);
+  assertEquals(counts.notifications, 4);
 });

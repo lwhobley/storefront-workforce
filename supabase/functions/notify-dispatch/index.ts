@@ -7,6 +7,11 @@
 // (or "expired" when it waited more than a day). Non-urgent notifications wait for the
 // person's quiet hours to end. Email goes only to people who turned it on.
 //
+// Temporary provider failures (rate limits, outages, network errors) are sent again
+// after a backoff, up to the attempt limit claim_notification_batch hands out; channels
+// already delivered are not repeated. A row that throws is recorded as failed on its
+// own, and results are written back only while this run still holds the claim.
+//
 // Called by a scheduled job (every minute) with the x-cron-secret header. Not for users.
 //
 // Secrets (set with `supabase secrets set`); each provider is skipped when missing:
@@ -16,7 +21,7 @@
 //   APP_URL                                      optional; links in email and web push
 import { corsHeaders, json } from "../_shared/http.ts";
 import { serviceClient } from "../_shared/clients.ts";
-import { type Claimed, combinePush, type Configured, planDelivery, type Result } from "./helpers.ts";
+import { type Claimed, type Configured, processBatch } from "./helpers.ts";
 import { fcmConfig, resendConfig, sendEmail, sendPush } from "./providers.ts";
 
 const BATCH = 50;
@@ -31,14 +36,6 @@ function sameSecret(a: string, b: string): boolean {
   return diff === 0;
 }
 
-async function inParallel<T>(items: T[], limit: number, work: (item: T) => Promise<void>) {
-  let next = 0;
-  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) await work(items[next++]);
-  });
-  await Promise.all(runners);
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -51,11 +48,14 @@ Deno.serve(async (req) => {
   const email = resendConfig(env);
   const push = fcmConfig(env);
   const configured: Configured = { email: email !== null, push: push !== null };
+  const senders = {
+    email: email ? (n: Claimed) => sendEmail(email, n) : undefined,
+    push: push ? (n: Claimed) => sendPush(push, n) : undefined,
+  };
 
   const admin = serviceClient();
   const started = Date.now();
   const totals: Record<string, number> = { notifications: 0, deferred: 0 };
-  const count = (key: string) => totals[key] = (totals[key] ?? 0) + 1;
 
   try {
     for (let batch = 0; batch < MAX_BATCHES && Date.now() - started < TIME_BUDGET_MS; batch++) {
@@ -64,29 +64,9 @@ Deno.serve(async (req) => {
       const rows = (data ?? []) as Claimed[];
       if (rows.length === 0) break;
 
-      const updates: { id: string; sent?: Record<string, Result>; deliver_after?: string }[] = [];
-      const stale: string[] = [];
-      await inParallel(rows, PARALLEL, async (n) => {
-        totals.notifications++;
-        const plan = planDelivery(n, configured, new Date());
-        if (plan.deferUntil) {
-          totals.deferred++;
-          updates.push({ id: n.id, deliver_after: plan.deferUntil.toISOString() });
-          return;
-        }
-        const sent: Record<string, Result> = {};
-        for (const [channel, result] of Object.entries(plan.results)) if (result) sent[channel] = result;
-        for (const channel of plan.send) {
-          if (channel === "email" && email) sent.email = await sendEmail(email, n);
-          if (channel === "push" && push) {
-            const r = await sendPush(push, n);
-            stale.push(...r.staleTokens);
-            sent.push = combinePush(r.results);
-          }
-        }
-        for (const [channel, result] of Object.entries(sent)) count(`${channel}:${result.startsWith("failed") ? "failed" : result}`);
-        updates.push({ id: n.id, sent });
-      });
+      // Every row gets a result, even when one of them throws.
+      const { updates, stale, counts } = await processBatch(rows, configured, senders, () => new Date(), PARALLEL);
+      for (const [key, value] of Object.entries(counts)) totals[key] = (totals[key] ?? 0) + value;
 
       const { error: saveError } = await admin.rpc("record_notification_results", { p_results: updates });
       if (saveError) throw saveError;
