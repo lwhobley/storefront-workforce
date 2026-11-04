@@ -36,6 +36,9 @@ begin
   select * into r from job_roles where venue_id = ev.venue_id and code = p_role;
   if w.id is null or w.venue_id <> ev.venue_id then return 'This person is not on this venue''s staff.'; end if;
   if w.status <> 'active' then return 'This person is inactive.'; end if;
+  if exists (select 1 from rehire_flags f where f.venue_id = ev.venue_id and f.worker_id = p_worker) then
+    return 'This person is flagged do not rehire.';
+  end if;
   if exists (select 1 from shifts s where s.event_id = p_event and s.worker_id = p_worker
              and s.status in ('assigned', 'released') and s.id <> p_shift) then
     return 'This person already has a position at this event.';

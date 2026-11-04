@@ -346,4 +346,12 @@ select pg_temp.as_user('00000000-0000-0000-0000-000000001412');
 select pg_temp.expect_error($$select npo_portal('2026-08-01', current_date)$$, 'an employee has no partner portal');
 select pg_temp.expect_error($$select onboarding_state('00000000-0000-0000-0000-00000014c002')$$, 'the internal state function is not callable');
 
+
+-- ---- 0018 keeps the do-not-rehire check from 0017 ------------------------------------
+select pg_temp.as_owner();
+select pg_temp.expect(assignment_block_reason('00000000-0000-0000-0000-00000014c002', '00000000-0000-0000-0000-000000140e02', 'cashier', gen_random_uuid()) is null,
+  'an eligible cashier can be placed');
+insert into rehire_flags (venue_id, worker_id, reason) values ('00000000-0000-0000-0000-00000014aa01', '00000000-0000-0000-0000-00000014c002', 'No-show twice');
+select pg_temp.expect(assignment_block_reason('00000000-0000-0000-0000-00000014c002', '00000000-0000-0000-0000-000000140e02', 'cashier', gen_random_uuid()) = 'This person is flagged do not rehire.',
+  'a do-not-rehire flag still blocks placement');
 rollback;

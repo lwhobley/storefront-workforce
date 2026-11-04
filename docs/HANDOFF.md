@@ -29,8 +29,8 @@ which shares the Flutter + Supabase stack and its look.
 |---|---|
 | 1. Event night basics | Done: schedule builder, live view with the CUTX concourse map, phone and kiosk clock-in (PIN + photo, offline), moves and early release, rules engine |
 | 2. Pay | Done: pay engine, time corrections, pay periods with approve/lock, Paycom entry sheet and CSV, tips, NPO payouts, agency invoices |
-| 3. Self-service and communication | Done in code (shift trading and availability, messages and alerts, onboarding, partner portals, own hours and tips). Not yet applied to the live database |
-| 4. Performance and reports | Not started |
+| 3. Self-service and communication | Done (shift trading and availability, messages and alerts, onboarding, partner portals, own hours and tips). Live database updated; `notify-dispatch` not deployed |
+| 4. Performance and reports | Started in another working copy (report targets, ratings, do-not-rehire in the database); app code not on GitHub yet |
 | 5. Multi-venue admin | Not started (tenant isolation itself is built and tested) |
 
 ### Phase 3 notes
@@ -49,12 +49,12 @@ All three areas are built and tested (each in its own files; see "Code map").
   card photos reviewed by a manager, training items, Paycom done), the onboarding
   board, Add person, roster CSV import with checks, the NPO coordinator and agency
   contact portals, and employees' own hours and tips (no wages). Migration 0014.
-- **Fixes in 0015:** agency and NPO contacts no longer read staff records directly
+- **Fixes in 0018:** agency and NPO contacts no longer read staff records directly
   (only through their portal, so no birth dates), and an uploaded card photo does not
   count for scheduling until a manager verifies it.
 
-Before applying 0014 to the live project, decide:
-- **Backfill:** existing staff will show "not finished" because nobody has onboarding
+0014 is live, so decide soon:
+- **Backfill:** existing staff show "not finished" because nobody has onboarding
   records yet. Mark returning staff complete, or let them work through it.
 - **Documents:** the seeded documents are inactive drafts. The venue writes the real
   text, and counsel reviews the volunteer waiver. Confirm that a typed name is enough as
@@ -89,10 +89,14 @@ see it on the board).
 
 ## Backend state (live Supabase project)
 
-- **Migrations applied: 0001–0010.** Not yet applied: **0011** (hide wages, shared
-  notifications), **0012** (shifts), **0013** (communication), **0014** (people), **0015** (privacy fixes). The
-  web app on `main` already calls their functions, so **the connected app's new
-  Phase 3 screens fail until 0011–0015 are applied.** Demo mode (`?demo`) works now.
+- **Migrations applied: 0001–0017.** 0011–0014 (Phase 3) match this repo function for
+  function. **0015–0017** (report targets, ratings, do-not-rehire) were applied from
+  another working copy whose app code is not on GitHub yet; the SQL was copied into this
+  repo from the live project's migration history, and 0017 was checked to match the live
+  function exactly. **0018** (partner privacy, card review) is the only one not yet
+  applied. It builds on 0017's `assignment_block_reason`, keeping the do-not-rehire check.
+- **Two working copies:** whoever pushes the Phase 4 app code must rebase onto `main` and
+  keep these migration numbers. New migrations start at 0019.
 - **Edge functions deployed:** `pin-login`, `kiosk-punch`, `staff-admin`, `event-sync`.
   Not deployed: `notify-dispatch`. `setup-sql` is a disabled loader (returns 410) and
   can be deleted.
@@ -135,7 +139,7 @@ see it on the board).
 ## Next steps, in order
 
 1. Decide the onboarding backfill and write the real onboarding documents (see Phase 3 notes).
-2. Apply migrations 0011–0015 to the live project. Deploy `notify-dispatch` once
+2. Apply migration 0018 to the live project if not yet done. Deploy `notify-dispatch` once
    secrets exist. Smoke-test the connected app with the sample PINs.
 3. Push registration in the app: add `firebase_messaging`, register tokens with
    `registerPushToken`, and wire the `unreadCountProvider` badge in the nav.
@@ -174,7 +178,7 @@ packages/workforce_core/
   lib/src/pay/      pay engine (earnings, tips, NPO, agency, pay periods, Paycom export)
   lib/src/layout/   CUTX plan geometry (from Premium Command)
   lib/src/sample/   sample arena and sample pay setup
-supabase/migrations 0001–0015;  supabase/tests;  supabase/functions
+supabase/migrations 0001–0018;  supabase/tests;  supabase/functions
 ```
 
 ## Gotchas learned the hard way
