@@ -5,6 +5,7 @@ import 'package:workforce_core/workforce_core.dart';
 
 import '../core/time/venue_time.dart';
 import 'models.dart';
+import 'pay_data.dart';
 import 'workforce_repository.dart';
 
 /// A demo persona: a PIN that signs in as one role in the sample arena.
@@ -45,6 +46,17 @@ class DemoWorkforceRepository implements WorkforceRepository {
   final Map<String, AppSession> _sessionsByPin = {};
   AppSession? _session;
   int _seq = 0;
+
+  // Pay (Phase 2), in memory.
+  late final SamplePay _pay = SamplePay.generate(_arena);
+  late final Map<String, TipPool> _tipPools = {for (final t in _pay.tipPools) t.id: t};
+  final Map<String, List<TipAllocation>> _allocations = {};
+  final Map<String, PayPeriod> _periods = {};
+  final Map<String, List<PayLine>> _approvedLines = {};
+  final Map<String, Set<String>> _entered = {};
+  final Map<String, List<PayrollExportRecord>> _exports = {};
+  final List<TimeCorrection> _corrections = [];
+  final Map<String, NpoPayout> _npoPayouts = {};
 
   static const personas = [
     DemoPersona('100001', 'Admin / GM', 'Sees everything'),
@@ -559,6 +571,225 @@ class DemoWorkforceRepository implements WorkforceRepository {
         final workerId = session.workerId;
         if (workerId == null) throw const AppFailure('No staff record is linked to this sign-in');
         return _store(workerId, draft, PunchSource.phone, photo: photo != null);
+      });
+
+  // ---- Pay ----
+
+  void _requirePerm(String perm) {
+    if (!_me.canVenueWide(perm)) throw const AppFailure('You do not have permission to do that.');
+  }
+
+  @override
+  Future<PaySetup> loadPaySetup(AppSession session) => _delay(() {
+        _requirePerm('view_pay');
+        return PaySetup(
+          payCodes: _pay.payCodes,
+          rates: _pay.rates,
+          differentials: _pay.differentials,
+          billRates: _pay.billRates,
+          npoAgreements: _pay.npoAgreements,
+          periods: _periods.values.toList()..sort((a, b) => b.startsOn.compareTo(a.startsOn)),
+        );
+      });
+
+  @override
+  Future<void> ensurePayPeriods(AppSession session, DateTime through) => _delay(() {
+        final rules = session.rules;
+        final payRules = PayRules.fromVenueSettings(session.venue.settings);
+        for (final p in generatePayPeriodsFor(
+          venueRules: rules,
+          payRules: payRules,
+          from: DateTime.utc(through.year, through.month, through.day).subtract(const Duration(days: 120)),
+          to: through,
+          venueId: session.venue.id,
+        )) {
+          final key = formatDate(p.startsOn);
+          _periods.putIfAbsent(
+            key,
+            () => PayPeriod(id: 'period-$key', venueId: p.venueId, startsOn: p.startsOn, endsOn: p.endsOn, payDate: p.payDate),
+          );
+        }
+      });
+
+  PayPeriod _period(PayPeriod p) => _periods[formatDate(p.startsOn)]!;
+
+  void _setPeriod(PayPeriod p, {required String status, DateTime? approvedAt, int? rulesVersion}) {
+    _periods[formatDate(p.startsOn)] = PayPeriod(
+      id: p.id,
+      venueId: p.venueId,
+      startsOn: p.startsOn,
+      endsOn: p.endsOn,
+      payDate: p.payDate,
+      status: status,
+      approvedBy: status == 'open' ? null : _me.userId,
+      approvedAt: approvedAt,
+      rulesVersion: rulesVersion,
+    );
+  }
+
+  ({DateTime from, DateTime to}) _window(DateTime fromDate, DateTime toDate) {
+    final tz = _arena.venue.timeZone;
+    return (from: startOfLocalDay(addCalendarDays(fromDate, -7), tz), to: startOfLocalDay(addCalendarDays(toDate, 8), tz));
+  }
+
+  @override
+  Future<PeriodData> loadPeriodData(AppSession session, PayPeriod period) => _delay(() {
+        _requirePerm('view_pay');
+        final p = _period(period);
+        final w = _window(p.startsOn, p.endsOn);
+        bool inWindow(DateTime t) => !t.isBefore(w.from) && t.isBefore(w.to);
+        final events = {for (final e in _events.values) if (inWindow(e.startTime)) e.id: e};
+        final pools = [for (final t in _tipPools.values) if (events.containsKey(t.eventId)) t];
+        return PeriodData(
+          period: p,
+          workers: Map.of(_workers),
+          punches: [for (final x in _punches) if (inWindow(x.occurredAt)) x],
+          shifts: [for (final x in _shifts.values) if (inWindow(x.callTime)) x],
+          events: events,
+          tipPools: pools,
+          tipAllocations: [for (final t in pools) ...?_allocations[t.id]],
+          corrections: List.of(_corrections.reversed),
+          enteredWorkerIds: {...?_entered[p.id]},
+          approvedLines: [...?_approvedLines[p.id]],
+          exports: [...?_exports[p.id]],
+        );
+      });
+
+  @override
+  Future<void> approvePayPeriod(PayPeriod period, List<PayLine> lines, int rulesVersion) => _delay(() {
+        _requirePerm('approve_time');
+        final p = _period(period);
+        if (p.status != 'open') throw const AppFailure('Already approved');
+        if (_corrections.any((c) => c.status == 'pending')) {
+          throw const AppFailure('Decide the pending time corrections in this period first');
+        }
+        _approvedLines[p.id!] = List.of(lines);
+        _setPeriod(p, status: 'approved', approvedAt: DateTime.now().toUtc(), rulesVersion: rulesVersion);
+      });
+
+  @override
+  Future<void> reopenPayPeriod(PayPeriod period, String reason) => _delay(() {
+        _requirePerm('approve_time');
+        final p = _period(period);
+        _approvedLines.remove(p.id);
+        _entered.remove(p.id);
+        _setPeriod(p, status: 'open');
+      });
+
+  @override
+  Future<void> setEntered(PayPeriod period, String workerId, bool entered) => _delay(() {
+        _requirePerm('export_payroll');
+        final set = _entered.putIfAbsent(period.id!, () => {});
+        entered ? set.add(workerId) : set.remove(workerId);
+      });
+
+  @override
+  Future<void> recordExport(PayPeriod period, {required String format, required String fileName, required int rows, required String hours, required String amount, required String sha256}) =>
+      _delay(() {
+        _requirePerm('export_payroll');
+        final p = _period(period);
+        if (p.status == 'open') throw const AppFailure('Approve the pay period first');
+        _exports.putIfAbsent(p.id!, () => []).insert(
+              0,
+              PayrollExportRecord(format: format, fileName: fileName, rowCount: rows, createdAt: DateTime.now().toUtc(), createdByName: _me.displayName),
+            );
+        _setPeriod(p, status: 'exported', approvedAt: p.approvedAt, rulesVersion: p.rulesVersion);
+      });
+
+  @override
+  Future<void> requestCorrection(Map<String, dynamic> c) => _delay(() {
+        _requirePerm('edit_time');
+        _corrections.add(TimeCorrection.fromJson({
+          ...c,
+          'id': _id(),
+          'venue_id': _arena.venue.id,
+          'status': 'pending',
+          'requested_by': _me.userId,
+          'requested_at': DateTime.now().toUtc().toIso8601String(),
+        }));
+      });
+
+  @override
+  Future<void> decideCorrection(String id, {required bool approve, String note = ''}) => _delay(() {
+        _requirePerm('approve_time');
+        final i = _corrections.indexWhere((c) => c.id == id);
+        final c = _corrections[i];
+        if (c.requestedBy == _me.userId) throw const AppFailure('Another manager must approve your own correction');
+        String? created;
+        if (approve) {
+          final old = c.punchId == null ? null : _punches.firstWhere((p) => p.id == c.punchId);
+          if (old != null) {
+            _punches[_punches.indexOf(old)] = Punch.fromJson({...old.toJson(), 'status': 'voided'});
+          }
+          if (c.action != 'void') {
+            created = _id();
+            _punches.add(Punch(
+              id: created,
+              venueId: _arena.venue.id,
+              workerId: c.workerId,
+              eventId: c.eventId ?? old?.eventId,
+              shiftId: old?.shiftId,
+              kind: PunchKind.fromCode(c.newKind ?? old?.kind.code),
+              breakKind: c.newBreakKind == null ? old?.breakKind : BreakKind.fromCode(c.newBreakKind),
+              occurredAt: c.newOccurredAt!,
+              source: PunchSource.manager,
+            ));
+          }
+        }
+        _corrections[i] = TimeCorrection.fromJson({
+          ...c.toJson(),
+          'status': approve ? 'approved' : 'rejected',
+          'decided_by': _me.userId,
+          'decided_at': DateTime.now().toUtc().toIso8601String(),
+          'decision_note': note,
+          'result_punch_id': created,
+        });
+      });
+
+  @override
+  Future<void> saveTipPool(TipPool pool, List<TipAllocation> allocations) => _delay(() {
+        _requirePerm('view_pay');
+        _tipPools[pool.id] = pool;
+        _allocations[pool.id] = List.of(allocations);
+      });
+
+  @override
+  Future<PartnerData> loadPartnerData(AppSession session, DateTime from, DateTime to) => _delay(() {
+        _requirePerm('view_pay');
+        final w = _window(from, to);
+        bool inWindow(DateTime t) => !t.isBefore(w.from) && t.isBefore(w.to);
+        final partners = {for (final x in _workers.values) if (x.type != WorkerType.regular) x.id: x};
+        final events = {for (final e in _events.values) if (inWindow(e.startTime)) e.id: e};
+        return PartnerData(
+          workers: partners,
+          punches: [for (final x in _punches) if (partners.containsKey(x.workerId) && inWindow(x.occurredAt)) x],
+          shifts: [for (final x in _shifts.values) if (inWindow(x.callTime)) x],
+          events: events,
+          payouts: [for (final x in _npoPayouts.values) if (events.containsKey(x.eventId)) x],
+        );
+      });
+
+  @override
+  Future<void> saveNpoPayout(NpoPayout payout) => _delay(() {
+        _requirePerm('approve_time');
+        final key = '${payout.eventId}:${payout.npoGroupId}';
+        final existing = _npoPayouts[key];
+        if (existing != null && existing.status != 'pending') throw const AppFailure('This payout is already approved');
+        _npoPayouts[key] = NpoPayout.fromJson({...payout.toJson(), 'id': existing?.id ?? _id(), 'venue_id': _arena.venue.id, 'status': 'pending'});
+      });
+
+  @override
+  Future<void> setNpoPayoutStatus(String payoutId, String status, {String reference = ''}) => _delay(() {
+        _requirePerm('approve_time');
+        final e = _npoPayouts.entries.firstWhere((e) => e.value.id == payoutId);
+        final now = DateTime.now().toUtc().toIso8601String();
+        _npoPayouts[e.key] = NpoPayout.fromJson({
+          ...e.value.toJson(),
+          'status': status,
+          if (status == 'approved') 'approved_at': now,
+          if (status == 'paid') 'paid_at': now,
+          if (status == 'paid') 'payment_reference': reference,
+        });
       });
 
   // ---- Kiosk ----

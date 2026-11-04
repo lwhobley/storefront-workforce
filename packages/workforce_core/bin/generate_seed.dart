@@ -14,6 +14,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:workforce_core/src/sample/sample_arena.dart';
+import 'package:workforce_core/src/sample/sample_pay.dart';
 
 const _defaultNow = '2026-11-04T23:30:00Z';
 const _batchSize = 1000;
@@ -52,7 +53,7 @@ void main(List<String> args) {
     ..writeln('begin;')
     ..writeln();
   final counts = <String, int>{};
-  arena.toTables().forEach((table, rows) {
+  <String, List<Map<String, dynamic>>>{...arena.toTables(), ...SamplePay.generate(arena).toTables()}.forEach((table, rows) {
     counts[table] = rows.length;
     for (var i = 0; i < rows.length; i += _batchSize) {
       final batch = rows.sublist(i, i + _batchSize > rows.length ? rows.length : i + _batchSize);

@@ -21,7 +21,12 @@ first venue is in Texas; Texas rules are the defaults, stored as settings.
 | Lateness, breaks, minors, overtime, certifications (rules engine + tests) | Built |
 | PIN sign-in for everyone; managers issue PINs from the staff list | Built |
 | English / Spanish on employee screens | Built (manager screens English for now) |
-| Pay, Paycom export, tips, NPO payouts, temp invoices | Phase 2 |
+| Pay engine: FLSA regular rate across roles, lead pay, tip credit option, rounding to the cent (113 tests) | Built (Phase 2) |
+| Time corrections with a second-manager approval; originals kept, voided | Built (Phase 2) |
+| Pay periods every two weeks: review, approve and lock, reopen with a reason | Built (Phase 2) |
+| Paycom entry sheet (sort by name or code, totals or by day, "entered" ticks) and CSV downloads | Built (Phase 2) |
+| Tip pools split by hours to the cent; NPO payouts (pending → approved → paid, AP list); agency invoices | Built (Phase 2) |
+| Labor cost per event and storefront against budget | Engine built; screen in Phase 4 reports |
 | Open shifts, swaps, availability, onboarding, notifications, portals | Phase 3 |
 | KPIs, reports, reliability, rankings, staffing suggestions, checklists, incidents | Phase 4 |
 | Company/venue admin, branding editor, retention and deletion tools | Phase 5 |
@@ -56,9 +61,9 @@ Cloudflare Pages project `storefront-workforce` (created on the first run), serv
 ## Tests
 
 ```bash
-cd packages/workforce_core && dart test     # labor rules (178) and sample data (29)
+cd packages/workforce_core && dart test     # labor rules, pay engine, sample data (327)
 flutter test                                  # schedule, live board, demo flows
-supabase/tests/run_local.sh                   # database: isolation, scopes, schedule, punches, sync (38)
+supabase/tests/run_local.sh                   # database: isolation, scopes, schedule, punches, sync, pay (65)
 deno test --allow-env supabase/functions/_shared/pin_test.ts
 ```
 
@@ -81,7 +86,7 @@ lib/                      Flutter app
   data/                   repository interface, Supabase and demo implementations
   features/               auth, events, schedule, live (map), clock, kiosk, staff
 packages/workforce_core/  domain models, labor rules, sample arena generator
-supabase/migrations/      schema, policies, functions (0001–0008)
+supabase/migrations/      schema, policies, functions (0001–0010)
 supabase/functions/       pin-login, kiosk-punch, staff-admin, event-sync
 supabase/tests/           SQL behavior tests and a local runner
 supabase/seed/            generated sample arena (40 storefronts, 300 staff, 8 NPO groups)

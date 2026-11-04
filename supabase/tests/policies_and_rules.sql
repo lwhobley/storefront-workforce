@@ -212,4 +212,103 @@ select pg_temp.expect((select call_time from events where external_id = 'pc-1') 
 select pg_temp.expect((select status from events where external_id = 'pc-1') = 'cancelled', 'cancellation flows from the source');
 select pg_temp.expect((select count(*) from events where venue_id = '00000000-0000-0000-0000-00000000bb01') = 1, 'sync did not touch venue B');
 
+-- ---- Phase 2: pay ------------------------------------------------------------
+select pg_temp.as_owner();
+insert into auth.users (id) values ('00000000-0000-0000-0000-000000000007'); -- admin A (second approver)
+insert into venue_memberships (venue_id, user_id) values ('00000000-0000-0000-0000-00000000aa01', '00000000-0000-0000-0000-000000000007');
+insert into role_assignments (venue_id, user_id, role_code) values ('00000000-0000-0000-0000-00000000aa01', '00000000-0000-0000-0000-000000000007', 'admin');
+insert into npo_groups (id, venue_id, legal_name, display_name) values
+  ('00000000-0000-0000-0000-00000000a901', '00000000-0000-0000-0000-00000000aa01', 'Band Boosters Inc.', 'Band Boosters');
+insert into pay_rates (venue_id, job_role_code, hourly_rate, effective_from) values
+  ('00000000-0000-0000-0000-00000000aa01', 'cashier', 13.00, '2026-01-01');
+
+select pg_temp.as_user('00000000-0000-0000-0000-000000000005');
+select pg_temp.expect_error($$select ensure_pay_periods('00000000-0000-0000-0000-00000000aa01', current_date)$$, 'manager B cannot create venue A pay periods');
+select pg_temp.expect((select count(*) from pay_rates) = 0, 'manager B sees no venue A pay rates');
+
+select pg_temp.as_user('00000000-0000-0000-0000-000000000003');
+select pg_temp.expect((select count(*) from pay_rates) = 0, 'an employee cannot see the rate table');
+select pg_temp.expect_error($$insert into pay_rates (venue_id, hourly_rate, effective_from) values ('00000000-0000-0000-0000-00000000aa01', 99, current_date)$$,
+  'an employee cannot set pay rates');
+select pg_temp.expect_error($$select request_time_correction(jsonb_build_object('worker_id', '00000000-0000-0000-0000-00000000c001',
+  'action', 'void', 'punch_id', '00000000-0000-0000-0000-00000000f001', 'reason', 'oops'))$$, 'an employee cannot correct time');
+
+select pg_temp.as_user('00000000-0000-0000-0000-000000000001');
+select ensure_pay_periods('00000000-0000-0000-0000-00000000aa01', current_date);
+select pg_temp.expect((select count(*) from pay_periods where current_date between starts_on and ends_on) = 1, 'the current pay period exists');
+select pg_temp.expect((select ends_on - starts_on from pay_periods limit 1) = 13, 'pay periods are two weeks');
+
+select request_time_correction(jsonb_build_object('worker_id', '00000000-0000-0000-0000-00000000c001',
+  'action', 'replace', 'punch_id', '00000000-0000-0000-0000-00000000f001',
+  'new_occurred_at', now() - interval '10 minutes', 'reason', 'Clocked in late by mistake'));
+select pg_temp.expect_error($$select decide_time_correction((select id from time_corrections limit 1), true)$$,
+  'a manager cannot approve their own correction');
+select pg_temp.expect_error($$select approve_pay_period((select id from pay_periods where current_date between starts_on and ends_on), '[]', 1)$$,
+  'a period with a pending correction cannot be approved');
+
+select pg_temp.as_user('00000000-0000-0000-0000-000000000007');
+select decide_time_correction((select id from time_corrections limit 1), true, 'OK');
+select pg_temp.expect((select status from punches where id = '00000000-0000-0000-0000-00000000f001') = 'voided', 'corrected punch is kept and voided');
+select pg_temp.expect((select count(*) from punches where source = 'manager' and worker_id = '00000000-0000-0000-0000-00000000c001') = 1,
+  'the corrected punch is added as a manager punch');
+
+select approve_pay_period((select id from pay_periods where current_date between starts_on and ends_on),
+  jsonb_build_array(
+    jsonb_build_object('worker_id', '00000000-0000-0000-0000-00000000c001', 'work_date', current_date, 'pay_code', 'REG', 'hours', 5.5, 'rate', 13, 'amount', 71.50),
+    jsonb_build_object('worker_id', '00000000-0000-0000-0000-00000000c004', 'work_date', current_date, 'pay_code', 'REG', 'hours', 4, 'rate', 13, 'amount', 52.00)),
+  1);
+select pg_temp.expect((select status from pay_periods where current_date between starts_on and ends_on) = 'approved', 'the period is approved');
+select pg_temp.expect_error($$select approve_pay_period((select id from pay_periods where current_date between starts_on and ends_on), '[]', 1)$$,
+  'an approved period cannot be approved again');
+select pg_temp.expect_error($$select approve_pay_period((select id from pay_periods where current_date - 30 between starts_on and ends_on),
+  jsonb_build_array(jsonb_build_object('worker_id', '00000000-0000-0000-0000-00000000c001', 'work_date', current_date, 'pay_code', 'REG', 'hours', 1, 'amount', 1)), 1)$$,
+  'a line dated outside the period is refused');
+
+select pg_temp.as_user('00000000-0000-0000-0000-000000000001');
+select pg_temp.expect_error($$select request_time_correction(jsonb_build_object('worker_id', '00000000-0000-0000-0000-00000000c001',
+  'action', 'add', 'new_kind', 'clock_out', 'new_occurred_at', now(), 'reason', 'Missed clock-out'))$$,
+  'time in an approved period cannot be changed without reopening');
+select pg_temp.expect((select count(*) from pay_period_lines) = 2, 'the manager sees the approved lines');
+
+select pg_temp.as_user('00000000-0000-0000-0000-000000000003');
+select pg_temp.expect((select count(*) from pay_period_lines) = 1, 'an employee sees only their own pay lines');
+select pg_temp.expect_error($$select record_payroll_export((select id from pay_periods where status = 'approved'), 'import_csv', 'x.csv', 2, 9.5, 123.5, 'abc')$$,
+  'an employee cannot export payroll');
+
+select pg_temp.as_user('00000000-0000-0000-0000-000000000005');
+select pg_temp.expect((select count(*) from pay_period_lines) = 0, 'manager B sees no venue A pay lines');
+
+select pg_temp.as_user('00000000-0000-0000-0000-000000000001');
+select record_payroll_export((select id from pay_periods where status = 'approved'), 'import_csv', 'x.csv', 2, 9.5, 123.5, 'abc');
+select pg_temp.expect((select status from pay_periods where current_date between starts_on and ends_on) = 'exported', 'export is recorded');
+select pg_temp.expect_error($$select reopen_pay_period((select id from pay_periods where current_date between starts_on and ends_on), '')$$,
+  'reopening needs a reason');
+select reopen_pay_period((select id from pay_periods where current_date between starts_on and ends_on), 'Late tips');
+select pg_temp.expect((select count(*) from pay_period_lines) = 0 and (select count(*) from payroll_exports) = 1,
+  'reopening clears the lines but keeps the export history');
+
+-- NPO payouts
+select save_npo_payout(jsonb_build_object('event_id', '00000000-0000-0000-0000-0000000e0001', 'npo_group_id', '00000000-0000-0000-0000-00000000a901',
+  'members_scheduled', 8, 'members_worked', 7, 'no_shows', 1, 'hours', 40.5, 'hourly_rate', 11, 'gross', 445.50, 'deductions', 50, 'total', 395.50));
+select pg_temp.expect_error($$select set_npo_payout_status((select id from npo_payouts limit 1), 'paid')$$, 'a payout must be approved before it is paid');
+select set_npo_payout_status((select id from npo_payouts limit 1), 'approved');
+select pg_temp.expect_error($$select save_npo_payout(jsonb_build_object('event_id', '00000000-0000-0000-0000-0000000e0001',
+  'npo_group_id', '00000000-0000-0000-0000-00000000a901', 'members_scheduled', 8, 'members_worked', 8, 'no_shows', 0, 'hours', 50,
+  'hourly_rate', 11, 'gross', 550, 'deductions', 0, 'total', 550))$$, 'an approved payout cannot be overwritten');
+select set_npo_payout_status((select id from npo_payouts limit 1), 'paid', 'ACH 7781');
+select pg_temp.expect((select status || ':' || payment_reference from npo_payouts) = 'paid:ACH 7781', 'payout marked paid with its reference');
+select pg_temp.as_owner();
+insert into npo_groups (id, venue_id, legal_name, display_name) values
+  ('00000000-0000-0000-0000-00000000a902', '00000000-0000-0000-0000-00000000aa01', 'Soccer Assn.', 'Soccer');
+select pg_temp.as_user('00000000-0000-0000-0000-000000000001');
+select pg_temp.expect_error($$select save_npo_payout(jsonb_build_object('event_id', '00000000-0000-0000-0000-0000000e0001',
+  'npo_group_id', '00000000-0000-0000-0000-00000000a902', 'members_scheduled', 0, 'members_worked', 0, 'no_shows', 0,
+  'hours', 0, 'hourly_rate', 11, 'gross', 0, 'deductions', 0, 'adjustment', -20, 'adjustment_reason', '', 'total', 0))$$,
+  'an adjustment needs a reason');
+select save_npo_payout(jsonb_build_object('event_id', '00000000-0000-0000-0000-0000000e0001',
+  'npo_group_id', '00000000-0000-0000-0000-00000000a902', 'members_scheduled', 0, 'members_worked', 0, 'no_shows', 0,
+  'hours', 0, 'hourly_rate', 11, 'gross', 0, 'deductions', 0, 'adjustment', 20, 'adjustment_reason', 'Setup help', 'total', 20));
+select pg_temp.expect((select total from npo_payouts where npo_group_id = '00000000-0000-0000-0000-00000000a902') = 20,
+  'an adjustment with a reason is saved');
+
 rollback;

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:workforce_core/workforce_core.dart';
 
 import 'models.dart';
+import 'pay_data.dart';
 
 /// Everything the app reads and writes. Two implementations: [SupabaseWorkforceRepository]
 /// for a real venue, and [DemoWorkforceRepository], which runs the sample arena in memory
@@ -49,6 +50,31 @@ abstract class WorkforceRepository {
   /// Sends one punch. Throws [AppFailure] with offline = true when the server cannot be
   /// reached, so the caller keeps it in the outbox.
   Future<Punch> sendPunch(AppSession session, PunchDraft draft, {Uint8List? photo});
+
+  // ---- Pay (Phase 2) ----
+  Future<PaySetup> loadPaySetup(AppSession session);
+
+  /// Makes sure pay periods exist up to [through] (from the venue's pay period rule).
+  Future<void> ensurePayPeriods(AppSession session, DateTime through);
+  Future<PeriodData> loadPeriodData(AppSession session, PayPeriod period);
+
+  /// Locks the period with the calculated lines.
+  Future<void> approvePayPeriod(PayPeriod period, List<PayLine> lines, int rulesVersion);
+  Future<void> reopenPayPeriod(PayPeriod period, String reason);
+  Future<void> setEntered(PayPeriod period, String workerId, bool entered);
+  Future<void> recordExport(PayPeriod period, {required String format, required String fileName, required int rows, required String hours, required String amount, required String sha256});
+
+  /// A manager proposes a time fix; another manager approves it.
+  Future<void> requestCorrection(Map<String, dynamic> correction);
+  Future<void> decideCorrection(String id, {required bool approve, String note = ''});
+
+  /// Saves a tip pool and its split.
+  Future<void> saveTipPool(TipPool pool, List<TipAllocation> allocations);
+
+  /// Work and payouts for partners (NPO groups, temp agencies) between two local dates.
+  Future<PartnerData> loadPartnerData(AppSession session, DateTime from, DateTime to);
+  Future<void> saveNpoPayout(NpoPayout payout);
+  Future<void> setNpoPayoutStatus(String payoutId, String status, {String reference = ''});
 
   // ---- Kiosk ----
   Future<KioskIdentity> kioskIdentify(String pin);

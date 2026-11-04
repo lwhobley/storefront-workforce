@@ -7,6 +7,7 @@ import 'package:workforce_core/workforce_core.dart';
 
 import '../core/offline/device_id.dart';
 import 'models.dart';
+import 'pay_data.dart';
 import 'workforce_repository.dart';
 
 /// The real backend. Every read goes through row level security, and every schedule
@@ -347,6 +348,181 @@ class SupabaseWorkforceRepository implements WorkforceRepository {
       e.status == EventStatus.completed ||
       e.status == EventStatus.cancelled ||
       (e.endTime ?? e.startTime.add(const Duration(hours: 3))).add(const Duration(hours: 2)).isBefore(now);
+
+  // ---- Pay ----
+
+  /// Reads every row of a query, 1,000 at a time (the API's page limit).
+  Future<List<Map<String, dynamic>>> _all(PostgrestTransformBuilder<List<Map<String, dynamic>>> Function(int from, int to) page) async {
+    const size = 1000;
+    final out = <Map<String, dynamic>>[];
+    for (var from = 0;; from += size) {
+      final rows = await page(from, from + size - 1);
+      out.addAll(rows);
+      if (rows.length < size) return out;
+    }
+  }
+
+  ({DateTime from, DateTime to}) _window(String tz, DateTime fromDate, DateTime toDate) => (
+        from: startOfLocalDay(addCalendarDays(fromDate, -7), tz),
+        to: startOfLocalDay(addCalendarDays(toDate, 8), tz),
+      );
+
+  Future<Map<String, Worker>> _workers(String venueId, {List<String>? types}) async {
+    final rows = await _all((a, b) {
+      var q = client.from('workers').select('*, worker_job_roles(job_role_code)').eq('venue_id', venueId);
+      if (types != null) q = q.inFilter('worker_type', types);
+      return q.order('id', ascending: true).range(a, b);
+    });
+    return {
+      for (final r in rows)
+        r['id'] as String: Worker.fromJson({...r, 'job_roles': [for (final j in (r['worker_job_roles'] as List)) j['job_role_code']]}),
+    };
+  }
+
+  @override
+  Future<PaySetup> loadPaySetup(AppSession session) => _guard(() async {
+        final id = session.venue.id;
+        final results = await Future.wait<List<Map<String, dynamic>>>([
+          client.from('pay_codes').select().eq('venue_id', id).order('sort', ascending: true),
+          client.from('pay_rates').select().eq('venue_id', id),
+          client.from('pay_differentials').select().eq('venue_id', id),
+          client.from('agency_bill_rates').select().eq('venue_id', id),
+          client.from('npo_agreements').select().eq('venue_id', id),
+          client.from('pay_periods').select().eq('venue_id', id).order('starts_on', ascending: false),
+          client.from('venue_rule_versions').select('version').eq('venue_id', id).order('version', ascending: false).limit(1),
+        ]);
+        return PaySetup(
+          payCodes: [for (final r in results[0]) PayCode.fromJson(r)],
+          rates: [for (final r in results[1]) PayRate.fromJson(r)],
+          differentials: [for (final r in results[2]) PayDifferential.fromJson(r)],
+          billRates: [for (final r in results[3]) AgencyBillRate.fromJson(r)],
+          npoAgreements: [for (final r in results[4]) NpoAgreement.fromJson(r)],
+          periods: [for (final r in results[5]) PayPeriod.fromJson(r)],
+          rulesVersion: results[6].isEmpty ? 1 : (results[6].first['version'] as num).toInt(),
+        );
+      });
+
+  @override
+  Future<void> ensurePayPeriods(AppSession session, DateTime through) => _guard(() => client.rpc('ensure_pay_periods', params: {
+        'p_venue': session.venue.id,
+        'p_through': formatDate(through),
+      }));
+
+  @override
+  Future<PeriodData> loadPeriodData(AppSession session, PayPeriod period) => _guard(() async {
+        final venueId = session.venue.id;
+        final tz = session.venue.timeZone;
+        final w = _window(tz, period.startsOn, period.endsOn);
+        final from = w.from.toIso8601String(), to = w.to.toIso8601String();
+        final workers = await _workers(venueId);
+        final punches = await _all((a, b) => client.from('punches').select().eq('venue_id', venueId)
+            .gte('occurred_at', from).lt('occurred_at', to).order('id', ascending: true).range(a, b));
+        final shifts = await _all((a, b) => client.from('shifts').select().eq('venue_id', venueId)
+            .gte('call_time', from).lt('call_time', to).order('id', ascending: true).range(a, b));
+        final events = await client.from('events').select().eq('venue_id', venueId).gte('start_time', from).lt('start_time', to);
+        final eventIds = [for (final e in events) e['id'] as String];
+        final pools = eventIds.isEmpty ? <Map<String, dynamic>>[] : await client.from('tip_pools').select().inFilter('event_id', eventIds);
+        final poolIds = [for (final p in pools) p['id'] as String];
+        final allocations = poolIds.isEmpty ? <Map<String, dynamic>>[] : await _all((a, b) =>
+            client.from('tip_allocations').select().inFilter('pool_id', poolIds).order('pool_id', ascending: true).range(a, b));
+        final corrections = await client.from('time_corrections').select().eq('venue_id', venueId)
+            .or('status.eq.pending,requested_at.gte.$from').order('requested_at', ascending: false);
+        final periodId = period.id;
+        final marks = periodId == null ? <Map<String, dynamic>>[] : await client.from('pay_entry_marks').select('worker_id').eq('pay_period_id', periodId);
+        final lines = periodId == null ? <Map<String, dynamic>>[] : await _all((a, b) =>
+            client.from('pay_period_lines').select().eq('pay_period_id', periodId).order('id', ascending: true).range(a, b));
+        final exports = periodId == null ? <Map<String, dynamic>>[] : await client.from('payroll_exports').select()
+            .eq('pay_period_id', periodId).order('created_at', ascending: false);
+        return PeriodData(
+          period: period,
+          workers: workers,
+          punches: [for (final r in punches) Punch.fromJson(r)],
+          shifts: [for (final r in shifts) Shift.fromJson(r)],
+          events: {for (final r in events) r['id'] as String: Event.fromJson(r)},
+          tipPools: [for (final r in pools) TipPool.fromJson(r)],
+          tipAllocations: [for (final r in allocations) TipAllocation.fromJson(r)],
+          corrections: [for (final r in corrections) TimeCorrection.fromJson(r)],
+          enteredWorkerIds: {for (final r in marks) r['worker_id'] as String},
+          approvedLines: [for (final r in lines) PayLine.fromJson(r)],
+          exports: [for (final r in exports) PayrollExportRecord.fromJson(r)],
+        );
+      });
+
+  @override
+  Future<void> approvePayPeriod(PayPeriod period, List<PayLine> lines, int rulesVersion) => _guard(() => client.rpc('approve_pay_period', params: {
+        'p_period': period.id,
+        'p_lines': [for (final l in lines) l.toJson()],
+        'p_rules_version': rulesVersion,
+      }));
+
+  @override
+  Future<void> reopenPayPeriod(PayPeriod period, String reason) =>
+      _guard(() => client.rpc('reopen_pay_period', params: {'p_period': period.id, 'p_reason': reason}));
+
+  @override
+  Future<void> setEntered(PayPeriod period, String workerId, bool entered) => _guard(() async {
+        if (entered) {
+          await client.from('pay_entry_marks').upsert({'pay_period_id': period.id, 'worker_id': workerId, 'venue_id': period.venueId});
+        } else {
+          await client.from('pay_entry_marks').delete().eq('pay_period_id', period.id!).eq('worker_id', workerId);
+        }
+      });
+
+  @override
+  Future<void> recordExport(PayPeriod period, {required String format, required String fileName, required int rows, required String hours, required String amount, required String sha256}) =>
+      _guard(() => client.rpc('record_payroll_export', params: {
+            'p_period': period.id,
+            'p_format': format,
+            'p_file': fileName,
+            'p_rows': rows,
+            'p_hours': hours,
+            'p_amount': amount,
+            'p_sha256': sha256,
+          }));
+
+  @override
+  Future<void> requestCorrection(Map<String, dynamic> correction) => _guard(() => client.rpc('request_time_correction', params: {'p': correction}));
+
+  @override
+  Future<void> decideCorrection(String id, {required bool approve, String note = ''}) =>
+      _guard(() => client.rpc('decide_time_correction', params: {'p_id': id, 'p_approve': approve, 'p_note': note}));
+
+  @override
+  Future<void> saveTipPool(TipPool pool, List<TipAllocation> allocations) => _guard(() async {
+        await client.from('tip_pools').upsert(pool.toJson());
+        await client.from('tip_allocations').delete().eq('pool_id', pool.id);
+        if (allocations.isNotEmpty) await client.from('tip_allocations').insert([for (final a in allocations) a.toJson()]);
+      });
+
+  @override
+  Future<PartnerData> loadPartnerData(AppSession session, DateTime from, DateTime to) => _guard(() async {
+        final venueId = session.venue.id;
+        final w = _window(session.venue.timeZone, from, to);
+        final f = w.from.toIso8601String(), t = w.to.toIso8601String();
+        final workers = await _workers(venueId, types: ['temp', 'npo']);
+        final ids = workers.keys.toList();
+        final punches = ids.isEmpty ? <Map<String, dynamic>>[] : await _all((a, b) => client.from('punches').select()
+            .inFilter('worker_id', ids).gte('occurred_at', f).lt('occurred_at', t).order('id', ascending: true).range(a, b));
+        final shifts = await _all((a, b) => client.from('shifts').select().eq('venue_id', venueId)
+            .gte('call_time', f).lt('call_time', t).order('id', ascending: true).range(a, b));
+        final events = await client.from('events').select().eq('venue_id', venueId).gte('start_time', f).lt('start_time', t);
+        final eventIds = [for (final e in events) e['id'] as String];
+        final payouts = eventIds.isEmpty ? <Map<String, dynamic>>[] : await client.from('npo_payouts').select().inFilter('event_id', eventIds);
+        return PartnerData(
+          workers: workers,
+          punches: [for (final r in punches) Punch.fromJson(r)],
+          shifts: [for (final r in shifts) Shift.fromJson(r)],
+          events: {for (final r in events) r['id'] as String: Event.fromJson(r)},
+          payouts: [for (final r in payouts) NpoPayout.fromJson(r)],
+        );
+      });
+
+  @override
+  Future<void> saveNpoPayout(NpoPayout payout) => _guard(() => client.rpc('save_npo_payout', params: {'p': payout.toJson()}));
+
+  @override
+  Future<void> setNpoPayoutStatus(String payoutId, String status, {String reference = ''}) =>
+      _guard(() => client.rpc('set_npo_payout_status', params: {'p_id': payoutId, 'p_status': status, 'p_reference': reference}));
 
   // ---- Kiosk ----
 

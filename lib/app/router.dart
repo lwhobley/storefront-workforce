@@ -8,6 +8,8 @@ import '../features/clock/clock_screen.dart';
 import '../features/events/event_calendar_screen.dart';
 import '../features/events/event_screen.dart';
 import '../features/kiosk/kiosk_screen.dart';
+import '../features/pay/pay_period_screen.dart';
+import '../features/pay/pay_screen.dart';
 import '../features/staff/staff_screen.dart';
 import 'more_screen.dart';
 import 'providers.dart';
@@ -25,6 +27,7 @@ List<NavItem> navFor(AppSession s) => [
       if (s.can(Perm.viewLive)) const NavItem('/live', 'Live', Icons.sensors),
       if (s.isManagerView) const NavItem('/events', 'Events', Icons.event),
       if (s.can(Perm.viewWorkers)) const NavItem('/staff', 'Staff', Icons.badge_outlined),
+      if (s.canVenueWide('view_pay')) const NavItem('/pay', 'Pay', Icons.payments_outlined),
       if (s.workerId != null) const NavItem('/clock', 'My shift', Icons.punch_clock_outlined),
       const NavItem('/more', 'More', Icons.menu),
     ];
@@ -65,6 +68,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/events', builder: (_, _) => const EventCalendarScreen()),
           GoRoute(path: '/events/:id', builder: (_, state) => EventScreen(eventId: state.pathParameters['id']!)),
           GoRoute(path: '/staff', builder: (_, _) => const StaffScreen()),
+          GoRoute(path: '/pay', builder: (_, _) => const PayScreen()),
+          GoRoute(path: '/pay/period/:id', builder: (_, state) => PayPeriodScreen(periodId: state.pathParameters['id']!)),
           GoRoute(path: '/clock', builder: (_, _) => const ClockScreen()),
           GoRoute(path: '/more', builder: (_, _) => const MoreScreen()),
         ],
