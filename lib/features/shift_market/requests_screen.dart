@@ -192,9 +192,10 @@ class _RequestCard extends StatelessWidget {
       _ => Tone.idle,
     };
     final headline = switch (r.kind) {
+      ShiftRequestKind.swap => '${r.requesterName} → ${r.targetName}',
+      _ when history => r.requesterName,
       ShiftRequestKind.pickup => '${r.requesterName} wants this shift',
       ShiftRequestKind.drop => '${r.requesterName} wants to drop',
-      ShiftRequestKind.swap => '${r.requesterName} → ${r.targetName}',
     };
     final pending = r.status == ShiftRequestStatus.pending;
 
@@ -262,7 +263,7 @@ class _RequestCard extends StatelessWidget {
                 style: AppText.meta,
               ),
               if (r.decisionNote.isNotEmpty) Text('“${r.decisionNote}”', style: AppText.body),
-              if (r.warnings.isNotEmpty) Text('Accepted warnings: ${r.warnings.join(', ')}', style: AppText.meta),
+              if (r.warnings.isNotEmpty) Text('Accepted warnings: ${r.warnings.map((w) => w.replaceAll('_', ' ')).join(', ')}', style: AppText.meta),
             ],
           ],
         ),
