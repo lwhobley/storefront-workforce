@@ -411,8 +411,9 @@ EarningsResult calculateEarnings({
       return role == null || role.tipped;
     }
 
-    /// (straight-time cash rate, regular-rate rate) in cents per hour.
-    (int, int) ratesFor(WorkPiece p) {
+    /// (straight-time cash rate, regular-rate rate) in cents per hour; null when no
+    /// rate applies (the time is then paid at 0 and reported).
+    (int, int)? ratesFor(WorkPiece p) {
       if (tipCreditFor(p.context)) {
         return (payRules.tipCredit.cashWageCents, payRules.minimumWageCents);
       }
@@ -431,7 +432,7 @@ EarningsResult calculateEarnings({
             workDate: p.date,
           ));
         }
-        return (0, 0);
+        return null;
       }
       if (r.hourlyRateCents < payRules.minimumWageCents && reported.add('min|$key')) {
         wProblems.add(PayProblem(
@@ -473,7 +474,8 @@ EarningsResult calculateEarnings({
       final bonusDrafts = <_Draft>[];
 
       for (final p in week.pieces) {
-        final (st, rr) = ratesFor(p);
+        final resolved = ratesFor(p);
+        final (st, rr) = resolved ?? (0, 0);
         final m = p.minutes;
         final c = p.context;
         final ds = diffsFor(c, p.date);
@@ -503,9 +505,15 @@ EarningsResult calculateEarnings({
           d.stMinuteCents += m * st;
           d.touch(p.start, p.end);
         } else {
-          final k = '${formatDate(p.date)}|${c.key}|$st';
+          final k = '${formatDate(p.date)}|${c.key}|${resolved == null ? 'none' : st}';
           final d = reg.putIfAbsent(
-              k, () => _Draft(workerId: w.id, date: p.date, context: c, payCode: PayCodes.regular, rateE4: st * 100));
+              k,
+              () => _Draft(
+                  workerId: w.id,
+                  date: p.date,
+                  context: c,
+                  payCode: PayCodes.regular,
+                  rateE4: resolved == null ? null : st * 100));
           d.minutes += m;
           d.touch(p.start, p.end);
         }
@@ -532,7 +540,7 @@ EarningsResult calculateEarnings({
       final weekGross = bigDivRoundHalfUp(grossNum, den);
 
       for (final d in reg.values) {
-        d.amountCents = amountForMinutes(d.minutes, d.rateE4! ~/ 100);
+        d.amountCents = d.rateE4 == null ? 0 : amountForMinutes(d.minutes, d.rateE4! ~/ 100);
       }
       for (final d in otDrafts.values) {
         final n = BigInt.from(d.stMinuteCents) * BigInt.from(1000) * bigT +
