@@ -17,6 +17,7 @@ export 'src/pay/rates.dart';
 export 'src/pay/tip_pools.dart';
 export 'src/pay/work_time.dart';
 export 'src/rules/attendance.dart';
+export 'src/rules/attendance_outcomes.dart';
 export 'src/rules/breaks.dart';
 export 'src/rules/certifications.dart';
 export 'src/rules/geofence.dart';
