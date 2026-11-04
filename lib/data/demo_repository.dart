@@ -8,12 +8,18 @@ import 'models.dart';
 import 'app_notification.dart';
 import 'comms_repository.dart';
 import 'pay_data.dart';
+import 'operations_repository.dart';
 import 'people_repository.dart';
+import 'performance_repository.dart';
+import 'reports_repository.dart';
 import 'shift_market_repository.dart';
 import 'workforce_repository.dart';
 
 part 'demo/comms_demo.dart';
 part 'demo/people_demo.dart';
+part 'demo/operations_demo.dart';
+part 'demo/performance_demo.dart';
+part 'demo/reports_demo.dart';
 part 'demo/shift_market_demo.dart';
 
 /// A demo persona: a PIN that signs in as one role in the sample arena.
@@ -875,7 +881,7 @@ abstract class _DemoCore implements WorkforceRepository {
 }
 
 /// The demo backend: the core above plus each Phase 3 area, in its own part file.
-class DemoWorkforceRepository extends _DemoCore with _DemoShiftMarket, _DemoComms, _DemoPeople {
+class DemoWorkforceRepository extends _DemoCore with _DemoShiftMarket, _DemoComms, _DemoPeople, _DemoReports, _DemoPerformance, _DemoOperations {
   DemoWorkforceRepository({super.now});
 
   static const personas = _DemoCore.personas;
