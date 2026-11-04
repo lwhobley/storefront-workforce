@@ -63,12 +63,12 @@ class TipPoolRules {
   }
 
   Map<String, dynamic> toJson() => {
-        'method': method,
-        'eligible_roles': eligibleRoles,
-        'include_worker_types': includeWorkerTypes,
-        // Fixed: cents, largest remainder, ties by worker id.
-        'rounding': 'largest_remainder_cent',
-      };
+    'method': method,
+    'eligible_roles': eligibleRoles,
+    'include_worker_types': includeWorkerTypes,
+    // Fixed: cents, largest remainder, ties by worker id.
+    'rounding': 'largest_remainder_cent',
+  };
 }
 
 class PayRules {
@@ -126,30 +126,30 @@ class PayRules {
           : parseScaled(j['overtime_multiplier'], 3),
       tipPool: TipPoolRules.fromJson((j['tip_pool'] as Map?)?.cast<String, dynamic>()),
       paydayDaysAfterEnd: (j['payday_days_after_end'] as num?)?.toInt() ?? d.paydayDaysAfterEnd,
-      laborBurdenBasisPoints:
-          j['labor_burden_percent'] == null ? d.laborBurdenBasisPoints : parseScaled(j['labor_burden_percent'], 2),
+      laborBurdenBasisPoints: j['labor_burden_percent'] == null
+          ? d.laborBurdenBasisPoints
+          : parseScaled(j['labor_burden_percent'], 2),
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'minimum_wage': centsToJson(minimumWageCents),
-        'tip_credit': tipCredit.toJson(),
-        'overtime_multiplier': overtimeMultiplierThousandths / 1000,
-        'tip_pool': tipPool.toJson(),
-        'payday_days_after_end': paydayDaysAfterEnd,
-        'labor_burden_percent': laborBurdenBasisPoints / 100,
-      };
+    'minimum_wage': centsToJson(minimumWageCents),
+    'tip_credit': tipCredit.toJson(),
+    'overtime_multiplier': overtimeMultiplierThousandths / 1000,
+    'tip_pool': tipPool.toJson(),
+    'payday_days_after_end': paydayDaysAfterEnd,
+    'labor_burden_percent': laborBurdenBasisPoints / 100,
+  };
 
   /// Settings that are below the federal floor or otherwise suspicious.
   List<String> complianceNotes() => [
-        if (minimumWageCents < 725) 'Minimum wage is below the federal \$7.25.',
-        if (tipCredit.enabled && tipCredit.cashWageCents < 213)
-          'Tip credit cash wage is below the federal \$2.13.',
-        if (tipCredit.enabled && tipCredit.cashWageCents >= minimumWageCents)
-          'Tip credit is on but the cash wage is not below minimum wage, so no credit is taken.',
-        if (overtimeMultiplierThousandths < 1500) 'Overtime multiplier is below the federal 1.5.',
-        if (paydayDaysAfterEnd < 0) 'Payday is before the end of the pay period.',
-        if (tipPool.eligibleRoles.contains('lead'))
-          'Leads are in the tip pool. Supervisors may not share in tip pools; confirm leads are not supervisors.',
-      ];
+    if (minimumWageCents < 725) 'Minimum wage is below the federal \$7.25.',
+    if (tipCredit.enabled && tipCredit.cashWageCents < 213) 'Tip credit cash wage is below the federal \$2.13.',
+    if (tipCredit.enabled && tipCredit.cashWageCents >= minimumWageCents)
+      'Tip credit is on but the cash wage is not below minimum wage, so no credit is taken.',
+    if (overtimeMultiplierThousandths < 1500) 'Overtime multiplier is below the federal 1.5.',
+    if (paydayDaysAfterEnd < 0) 'Payday is before the end of the pay period.',
+    if (tipPool.eligibleRoles.contains('lead'))
+      'Leads are in the tip pool. Supervisors may not share in tip pools; confirm leads are not supervisors.',
+  ];
 }

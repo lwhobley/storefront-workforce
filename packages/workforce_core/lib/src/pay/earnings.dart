@@ -228,23 +228,17 @@ class EarningsResult {
 
 /// Order of pay codes within a day.
 int _codeRank(String code) => switch (code) {
-      PayCodes.regular => 0,
-      PayCodes.overtime => 1,
-      PayCodes.bonus => 3,
-      PayCodes.tipCreditMakeup => 4,
-      PayCodes.tips => 5,
-      _ => 2,
-    };
+  PayCodes.regular => 0,
+  PayCodes.overtime => 1,
+  PayCodes.bonus => 3,
+  PayCodes.tipCreditMakeup => 4,
+  PayCodes.tips => 5,
+  _ => 2,
+};
 
 /// A line being built, with its exact parts.
 class _Draft {
-  _Draft({
-    required this.workerId,
-    required this.date,
-    required this.context,
-    required this.payCode,
-    this.rateE4,
-  });
+  _Draft({required this.workerId, required this.date, required this.context, required this.payCode, this.rateE4});
 
   final String workerId;
   final DateTime date;
@@ -266,19 +260,19 @@ class _Draft {
   }
 
   PayLine toLine(String? venueId, String? periodId) => PayLine(
-        venueId: venueId,
-        payPeriodId: periodId,
-        workerId: workerId,
-        workDate: date,
-        eventId: context.eventId,
-        storefrontId: context.storefrontId,
-        jobRoleCode: context.jobRoleCode,
-        payCode: payCode,
-        rateE4: rateE4,
-        amountCents: amountCents + adjustment,
-        minutes: minutes,
-        roundingAdjustmentCents: adjustment,
-      );
+    venueId: venueId,
+    payPeriodId: periodId,
+    workerId: workerId,
+    workDate: date,
+    eventId: context.eventId,
+    storefrontId: context.storefrontId,
+    jobRoleCode: context.jobRoleCode,
+    payCode: payCode,
+    rateE4: rateE4,
+    amountCents: amountCents + adjustment,
+    minutes: minutes,
+    roundingAdjustmentCents: adjustment,
+  );
 }
 
 /// Calculates payroll lines for [period].
@@ -304,21 +298,27 @@ EarningsResult calculateEarnings({
 
   final aligned = period.startsOn.weekday == ot.workweekStartDay && period.days % 7 == 0;
   if (!aligned) {
-    problems.add(PayProblem(
-      kind: PayProblemKind.periodNotAlignedToWorkweeks,
-      severity: PayProblemSeverity.warning,
-      message: 'Pay period ${formatDate(period.startsOn)} to ${formatDate(period.endsOn)} does not line up with '
-          'workweeks. Overtime is still figured per full workweek, and lines for days outside this period '
-          'are paid in the neighboring period; include punches for the whole workweeks and calculate both.',
-      workDate: period.startsOn,
-    ));
+    problems.add(
+      PayProblem(
+        kind: PayProblemKind.periodNotAlignedToWorkweeks,
+        severity: PayProblemSeverity.warning,
+        message:
+            'Pay period ${formatDate(period.startsOn)} to ${formatDate(period.endsOn)} does not line up with '
+            'workweeks. Overtime is still figured per full workweek, and lines for days outside this period '
+            'are paid in the neighboring period; include punches for the whole workweeks and calculate both.',
+        workDate: period.startsOn,
+      ),
+    );
   }
 
   final windowStart = localDateOf(
-      workweekStart(startOfLocalDay(period.startsOn, timeZone), timeZone, ot.workweekStartDay), timeZone);
+    workweekStart(startOfLocalDay(period.startsOn, timeZone), timeZone, ot.workweekStartDay),
+    timeZone,
+  );
   final windowEnd = addCalendarDays(
-      localDateOf(workweekStart(startOfLocalDay(period.endsOn, timeZone), timeZone, ot.workweekStartDay), timeZone),
-      6);
+    localDateOf(workweekStart(startOfLocalDay(period.endsOn, timeZone), timeZone, ot.workweekStartDay), timeZone),
+    6,
+  );
   bool inWindow(DateTime d) => !d.isBefore(windowStart) && !d.isAfter(windowEnd);
 
   // Tips by worker and date.
@@ -333,28 +333,32 @@ EarningsResult calculateEarnings({
     final pool = poolsById[a.poolId];
     final ev = pool == null ? null : events[pool.eventId];
     if (pool == null || ev == null) {
-      problems.add(PayProblem(
-        kind: PayProblemKind.tipPoolUnknown,
-        severity: PayProblemSeverity.blocking,
-        message: 'Tip allocation for pool ${a.poolId} cannot be dated: the pool or its event was not supplied.',
-        workerId: a.workerId,
-        eventId: pool?.eventId,
-      ));
+      problems.add(
+        PayProblem(
+          kind: PayProblemKind.tipPoolUnknown,
+          severity: PayProblemSeverity.blocking,
+          message: 'Tip allocation for pool ${a.poolId} cannot be dated: the pool or its event was not supplied.',
+          workerId: a.workerId,
+          eventId: pool?.eventId,
+        ),
+      );
       continue;
     }
     final date = localDateOf(ev.startTime, timeZone);
     if (!regularIds.contains(a.workerId)) {
       if (period.contains(date) && a.amountCents != 0) {
-        problems.add(PayProblem(
-          kind: PayProblemKind.tipsForNonPayrollWorker,
-          severity: PayProblemSeverity.warning,
-          message: inputIds.contains(a.workerId)
-              ? 'Tips of ${formatCents(a.amountCents)} allocated to a temp or NPO member are not paid through payroll.'
-              : 'Tips of ${formatCents(a.amountCents)} allocated to someone not in this payroll run.',
-          workerId: a.workerId,
-          eventId: pool.eventId,
-          workDate: date,
-        ));
+        problems.add(
+          PayProblem(
+            kind: PayProblemKind.tipsForNonPayrollWorker,
+            severity: PayProblemSeverity.warning,
+            message: inputIds.contains(a.workerId)
+                ? 'Tips of ${formatCents(a.amountCents)} allocated to a temp or NPO member are not paid through payroll.'
+                : 'Tips of ${formatCents(a.amountCents)} allocated to someone not in this payroll run.',
+            workerId: a.workerId,
+            eventId: pool.eventId,
+            workDate: date,
+          ),
+        );
       }
       continue;
     }
@@ -393,17 +397,25 @@ EarningsResult calculateEarnings({
     final reported = <String>{};
     String cacheKey(WorkContext c, DateTime d) => '${c.jobRoleCode}|${c.eventTypeCode}|${formatDate(d)}';
     PayRate? rateFor(WorkContext c, DateTime d) => rateCache.putIfAbsent(
-        cacheKey(c, d),
-        () => resolveRate(
-            workerId: w.id, jobRoleCode: c.jobRoleCode, eventTypeCode: c.eventTypeCode, date: d, rates: rates));
+      cacheKey(c, d),
+      () => resolveRate(
+        workerId: w.id,
+        jobRoleCode: c.jobRoleCode,
+        eventTypeCode: c.eventTypeCode,
+        date: d,
+        rates: rates,
+      ),
+    );
     List<PayDifferential> diffsFor(WorkContext c, DateTime d) => diffCache.putIfAbsent(
-        cacheKey(c, d),
-        () => resolveDifferentials(
-            workerId: w.id,
-            jobRoleCode: c.jobRoleCode,
-            eventTypeCode: c.eventTypeCode,
-            date: d,
-            differentials: differentials));
+      cacheKey(c, d),
+      () => resolveDifferentials(
+        workerId: w.id,
+        jobRoleCode: c.jobRoleCode,
+        eventTypeCode: c.eventTypeCode,
+        date: d,
+        differentials: differentials,
+      ),
+    );
     final workerTipCredit = tipCreditOn && tipCreditWorkers.contains(w.id);
     bool tipCreditFor(WorkContext c) {
       if (!workerTipCredit) return false;
@@ -421,29 +433,35 @@ EarningsResult calculateEarnings({
       final key = cacheKey(p.context, p.date);
       if (r == null) {
         if (reported.add('rate|$key')) {
-          wProblems.add(PayProblem(
-            kind: PayProblemKind.missingRate,
-            severity: PayProblemSeverity.blocking,
-            message: 'No pay rate for ${p.context.jobRoleCode ?? 'no role'}'
-                '${p.context.eventTypeCode == null ? '' : ' at ${p.context.eventTypeCode}'} on ${formatDate(p.date)}.',
-            workerId: w.id,
-            eventId: p.context.eventId,
-            shiftId: p.context.shiftId,
-            workDate: p.date,
-          ));
+          wProblems.add(
+            PayProblem(
+              kind: PayProblemKind.missingRate,
+              severity: PayProblemSeverity.blocking,
+              message:
+                  'No pay rate for ${p.context.jobRoleCode ?? 'no role'}'
+                  '${p.context.eventTypeCode == null ? '' : ' at ${p.context.eventTypeCode}'} on ${formatDate(p.date)}.',
+              workerId: w.id,
+              eventId: p.context.eventId,
+              shiftId: p.context.shiftId,
+              workDate: p.date,
+            ),
+          );
         }
         return null;
       }
       if (r.hourlyRateCents < payRules.minimumWageCents && reported.add('min|$key')) {
-        wProblems.add(PayProblem(
-          kind: PayProblemKind.belowMinimumWage,
-          severity: PayProblemSeverity.blocking,
-          message: 'Rate ${formatCents(r.hourlyRateCents)} is below minimum wage '
-              '${formatCents(payRules.minimumWageCents)} on ${formatDate(p.date)}.',
-          workerId: w.id,
-          eventId: p.context.eventId,
-          workDate: p.date,
-        ));
+        wProblems.add(
+          PayProblem(
+            kind: PayProblemKind.belowMinimumWage,
+            severity: PayProblemSeverity.blocking,
+            message:
+                'Rate ${formatCents(r.hourlyRateCents)} is below minimum wage '
+                '${formatCents(payRules.minimumWageCents)} on ${formatDate(p.date)}.',
+            workerId: w.id,
+            eventId: p.context.eventId,
+            workDate: p.date,
+          ),
+        );
       }
       return (r.hourlyRateCents, r.hourlyRateCents);
     }
@@ -485,9 +503,9 @@ EarningsResult calculateEarnings({
           perHour += d.perHourCents;
           final k = '${formatDate(p.date)}|${c.key}|${d.payCode}|${d.perHourCents}';
           final dd = diffDrafts.putIfAbsent(
-              k,
-              () => _Draft(
-                  workerId: w.id, date: p.date, context: c, payCode: d.payCode, rateE4: d.perHourCents * 100));
+            k,
+            () => _Draft(workerId: w.id, date: p.date, context: c, payCode: d.payCode, rateE4: d.perHourCents * 100),
+          );
           dd.minutes += m;
           dd.touch(p.start, p.end);
         }
@@ -500,20 +518,24 @@ EarningsResult calculateEarnings({
         if (p.overtime) {
           final k = '${formatDate(p.date)}|${c.key}';
           final d = otDrafts.putIfAbsent(
-              k, () => _Draft(workerId: w.id, date: p.date, context: c, payCode: PayCodes.overtime));
+            k,
+            () => _Draft(workerId: w.id, date: p.date, context: c, payCode: PayCodes.overtime),
+          );
           d.minutes += m;
           d.stMinuteCents += m * st;
           d.touch(p.start, p.end);
         } else {
           final k = '${formatDate(p.date)}|${c.key}|${resolved == null ? 'none' : st}';
           final d = reg.putIfAbsent(
-              k,
-              () => _Draft(
-                  workerId: w.id,
-                  date: p.date,
-                  context: c,
-                  payCode: PayCodes.regular,
-                  rateE4: resolved == null ? null : st * 100));
+            k,
+            () => _Draft(
+              workerId: w.id,
+              date: p.date,
+              context: c,
+              payCode: PayCodes.regular,
+              rateE4: resolved == null ? null : st * 100,
+            ),
+          );
           d.minutes += m;
           d.touch(p.start, p.end);
         }
@@ -527,9 +549,10 @@ EarningsResult calculateEarnings({
         eCash60 += perShift * 60;
         eRr60 += perShift * 60;
         bonusDrafts.add(
-            _Draft(workerId: w.id, date: first.date, context: first.context, payCode: PayCodes.bonus)
-              ..amountCents = perShift
-              ..touch(first.start, first.end));
+          _Draft(workerId: w.id, date: first.date, context: first.context, payCode: PayCodes.bonus)
+            ..amountCents = perShift
+            ..touch(first.start, first.end),
+        );
       }
 
       // Exact week gross = (eCash60 * 1000 * T + OT * eRr60 * (mult - 1000)) / (60000 * T).
@@ -543,7 +566,8 @@ EarningsResult calculateEarnings({
         d.amountCents = d.rateE4 == null ? 0 : amountForMinutes(d.minutes, d.rateE4! ~/ 100);
       }
       for (final d in otDrafts.values) {
-        final n = BigInt.from(d.stMinuteCents) * BigInt.from(1000) * bigT +
+        final n =
+            BigInt.from(d.stMinuteCents) * BigInt.from(1000) * bigT +
             BigInt.from(d.minutes) * BigInt.from(eRr60) * BigInt.from(mult - 1000);
         d.amountCents = bigDivRoundHalfUp(n, den);
         d.rateE4 = bigDivRoundHalfUp(n * BigInt.from(6000), den * BigInt.from(d.minutes));
@@ -575,30 +599,33 @@ EarningsResult calculateEarnings({
       if (makeup > 0) {
         final p = lastTcPiece!;
         weekDrafts.add(
-            _Draft(workerId: w.id, date: p.date, context: p.context, payCode: PayCodes.tipCreditMakeup)
-              ..amountCents = makeup
-              ..touch(p.start, p.end));
+          _Draft(workerId: w.id, date: p.date, context: p.context, payCode: PayCodes.tipCreditMakeup)
+            ..amountCents = makeup
+            ..touch(p.start, p.end),
+        );
       }
       drafts.addAll(weekDrafts);
 
-      weekPays.add(WeekPay(
-        firstDate: week.firstDate,
-        lastDate: week.lastDate,
-        totalMinutes: t,
-        overtimeMinutes: otMin,
-        dailyOvertimeMinutes: week.overtime.dailyOvertimeMinutes,
-        weeklyOvertimeMinutes: week.overtime.weeklyOvertimeMinutes,
-        straightTimeCents: divRoundHalfUp(eCash60, 60),
-        regularRateE4: divRoundHalfUp(eRr60 * 100, t),
-        overtimePremiumCents: bigDivRoundHalfUp(premiumNum, den),
-        grossCents: weekGross,
-        roundingAdjustmentCents: remainder,
-        tipCreditMinutes: tcMinutes,
-        tipCreditTakenCents: creditTaken,
-        tipsCents: tipsWeek,
-        tipMakeupCents: makeup,
-        withinPeriod: period.contains(week.firstDate) && period.contains(week.lastDate),
-      ));
+      weekPays.add(
+        WeekPay(
+          firstDate: week.firstDate,
+          lastDate: week.lastDate,
+          totalMinutes: t,
+          overtimeMinutes: otMin,
+          dailyOvertimeMinutes: week.overtime.dailyOvertimeMinutes,
+          weeklyOvertimeMinutes: week.overtime.weeklyOvertimeMinutes,
+          straightTimeCents: divRoundHalfUp(eCash60, 60),
+          regularRateE4: divRoundHalfUp(eRr60 * 100, t),
+          overtimePremiumCents: bigDivRoundHalfUp(premiumNum, den),
+          grossCents: weekGross,
+          roundingAdjustmentCents: remainder,
+          tipCreditMinutes: tcMinutes,
+          tipCreditTakenCents: creditTaken,
+          tipsCents: tipsWeek,
+          tipMakeupCents: makeup,
+          withinPeriod: period.contains(week.firstDate) && period.contains(week.lastDate),
+        ),
+      );
     }
 
     // TIPS: one line per worker per date in the period.
@@ -607,39 +634,42 @@ EarningsResult calculateEarnings({
       final amount = e.value.fold(0, (s, x) => s + x.$1.amountCents);
       final eventIds = {for (final x in e.value) x.$2.eventId};
       final storefrontIds = {for (final x in e.value) x.$2.storefrontId};
-      drafts.add(_Draft(
-        workerId: w.id,
-        date: e.key,
-        context: WorkContext(
-          eventId: eventIds.length == 1 ? eventIds.first : null,
-          storefrontId: storefrontIds.length == 1 ? storefrontIds.first : null,
-        ),
-        payCode: PayCodes.tips,
-      )..amountCents = amount);
+      drafts.add(
+        _Draft(
+          workerId: w.id,
+          date: e.key,
+          context: WorkContext(
+            eventId: eventIds.length == 1 ? eventIds.first : null,
+            storefrontId: storefrontIds.length == 1 ? storefrontIds.first : null,
+          ),
+          payCode: PayCodes.tips,
+        )..amountCents = amount,
+      );
     }
 
-    final inPeriod = [
-      for (final d in drafts)
-        if (period.contains(d.date)) d,
-    ]..sort((a, b) {
-        var c = a.date.compareTo(b.date);
-        if (c != 0) return c;
-        c = _codeRank(a.payCode).compareTo(_codeRank(b.payCode));
-        if (c != 0) return c;
-        c = a.payCode.compareTo(b.payCode);
-        if (c != 0) return c;
-        final fa = a.firstStart, fb = b.firstStart;
-        if (fa != null && fb != null) {
-          c = fa.compareTo(fb);
+    final inPeriod =
+        [
+          for (final d in drafts)
+            if (period.contains(d.date)) d,
+        ]..sort((a, b) {
+          var c = a.date.compareTo(b.date);
           if (c != 0) return c;
-        }
-        c = (a.context.eventId ?? '').compareTo(b.context.eventId ?? '');
-        if (c != 0) return c;
-        c = (a.context.storefrontId ?? '').compareTo(b.context.storefrontId ?? '');
-        if (c != 0) return c;
-        c = (a.context.jobRoleCode ?? '').compareTo(b.context.jobRoleCode ?? '');
-        return c != 0 ? c : (a.rateE4 ?? 0).compareTo(b.rateE4 ?? 0);
-      });
+          c = _codeRank(a.payCode).compareTo(_codeRank(b.payCode));
+          if (c != 0) return c;
+          c = a.payCode.compareTo(b.payCode);
+          if (c != 0) return c;
+          final fa = a.firstStart, fb = b.firstStart;
+          if (fa != null && fb != null) {
+            c = fa.compareTo(fb);
+            if (c != 0) return c;
+          }
+          c = (a.context.eventId ?? '').compareTo(b.context.eventId ?? '');
+          if (c != 0) return c;
+          c = (a.context.storefrontId ?? '').compareTo(b.context.storefrontId ?? '');
+          if (c != 0) return c;
+          c = (a.context.jobRoleCode ?? '').compareTo(b.context.jobRoleCode ?? '');
+          return c != 0 ? c : (a.rateE4 ?? 0).compareTo(b.rateE4 ?? 0);
+        });
     var lines = [for (final d in inPeriod) d.toLine(period.venueId, period.id)];
 
     // Hours: per pay code, rounded so the code's line hours add up to its total.
@@ -675,15 +705,17 @@ EarningsResult calculateEarnings({
       }
     }
 
-    summaries.add(WorkerPaySummary(
-      workerId: w.id,
-      lines: lines,
-      regularMinutes: regMin,
-      overtimeMinutes: otMinTotal,
-      byPayCode: Map.unmodifiable(byPayCode),
-      weeks: List.unmodifiable(weekPays),
-      problems: List.unmodifiable(wProblems),
-    ));
+    summaries.add(
+      WorkerPaySummary(
+        workerId: w.id,
+        lines: lines,
+        regularMinutes: regMin,
+        overtimeMinutes: otMinTotal,
+        byPayCode: Map.unmodifiable(byPayCode),
+        weeks: List.unmodifiable(weekPays),
+        problems: List.unmodifiable(wProblems),
+      ),
+    );
     allLines.addAll(lines);
     problems.addAll(wProblems);
   }

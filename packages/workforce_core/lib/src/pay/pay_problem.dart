@@ -87,15 +87,15 @@ class PayProblem {
   bool get isBlocking => severity == PayProblemSeverity.blocking;
 
   Map<String, dynamic> toJson() => {
-        'kind': kind.name,
-        'severity': severity.name,
-        'message': message,
-        'worker_id': workerId,
-        'event_id': eventId,
-        'shift_id': shiftId,
-        'punch_id': punchId,
-        'work_date': workDate == null ? null : formatDate(workDate!),
-      };
+    'kind': kind.name,
+    'severity': severity.name,
+    'message': message,
+    'worker_id': workerId,
+    'event_id': eventId,
+    'shift_id': shiftId,
+    'punch_id': punchId,
+    'work_date': workDate == null ? null : formatDate(workDate!),
+  };
 
   @override
   String toString() => 'PayProblem(${kind.name}, ${severity.name}, $workerId: $message)';

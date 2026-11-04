@@ -33,19 +33,18 @@ class EntrySheetOptions {
   final EntrySheetSort sort;
   final EntrySheetMode mode;
 
-  factory EntrySheetOptions.fromCodes({String sort = 'last_name', String mode = 'period_totals'}) =>
-      EntrySheetOptions(
-        sort: switch (sort) {
-          'last_name' => EntrySheetSort.lastName,
-          'employee_code' => EntrySheetSort.employeeCode,
-          _ => throw ArgumentError.value(sort, 'sort', 'must be last_name or employee_code'),
-        },
-        mode: switch (mode) {
-          'period_totals' => EntrySheetMode.periodTotals,
-          'daily' => EntrySheetMode.daily,
-          _ => throw ArgumentError.value(mode, 'mode', 'must be period_totals or daily'),
-        },
-      );
+  factory EntrySheetOptions.fromCodes({String sort = 'last_name', String mode = 'period_totals'}) => EntrySheetOptions(
+    sort: switch (sort) {
+      'last_name' => EntrySheetSort.lastName,
+      'employee_code' => EntrySheetSort.employeeCode,
+      _ => throw ArgumentError.value(sort, 'sort', 'must be last_name or employee_code'),
+    },
+    mode: switch (mode) {
+      'period_totals' => EntrySheetMode.periodTotals,
+      'daily' => EntrySheetMode.daily,
+      _ => throw ArgumentError.value(mode, 'mode', 'must be period_totals or daily'),
+    },
+  );
 }
 
 /// An extra column on the sheet (a differential, TIPMU, or other code).
@@ -269,16 +268,16 @@ class PaycomExporter implements PayrollExporter {
     bool isExtra(PayCodeKind k) =>
         k == PayCodeKind.differential || k == PayCodeKind.tipCreditMakeup || k == PayCodeKind.other;
 
-    final extra = <String>{
-      for (final c in payCodes)
-        if (c.kind == PayCodeKind.differential) c.code,
-      for (final l in lines)
-        if (isExtra(kindOf(l.payCode))) l.payCode,
-    }.toList()
-      ..sort((a, b) {
-        final c = (codes[a]?.sort ?? 1 << 20).compareTo(codes[b]?.sort ?? 1 << 20);
-        return c != 0 ? c : a.compareTo(b);
-      });
+    final extra =
+        <String>{
+          for (final c in payCodes)
+            if (c.kind == PayCodeKind.differential) c.code,
+          for (final l in lines)
+            if (isExtra(kindOf(l.payCode))) l.payCode,
+        }.toList()..sort((a, b) {
+          final c = (codes[a]?.sort ?? 1 << 20).compareTo(codes[b]?.sort ?? 1 << 20);
+          return c != 0 ? c : a.compareTo(b);
+        });
     final columns = [
       for (final code in extra)
         EntrySheetCodeColumn(
@@ -342,8 +341,7 @@ class PaycomExporter implements PayrollExporter {
     final missing = <String>{
       for (final r in rows)
         if (r.missingEmployeeCode) r.workerId!,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
     return EntrySheet(
       period: period,
       columns: List.unmodifiable(columns),
@@ -384,13 +382,13 @@ class PaycomExporter implements PayrollExporter {
     final hasHours = options.columns.any((c) => c.field == CsvField.hours);
 
     String workerText(Worker? w, CsvField f) => switch (f) {
-          CsvField.employeeCode => text(w?.paycomEmployeeCode.trim() ?? ''),
-          CsvField.lastName => text(w?.lastName ?? ''),
-          CsvField.firstName => text(w?.firstName ?? ''),
-          CsvField.periodStart => formatDate(period.startsOn),
-          CsvField.periodEnd => formatDate(period.endsOn),
-          _ => '',
-        };
+      CsvField.employeeCode => text(w?.paycomEmployeeCode.trim() ?? ''),
+      CsvField.lastName => text(w?.lastName ?? ''),
+      CsvField.firstName => text(w?.firstName ?? ''),
+      CsvField.periodStart => formatDate(period.startsOn),
+      CsvField.periodEnd => formatDate(period.endsOn),
+      _ => '',
+    };
 
     final sortRows = <(EntrySheetRow, List<String>, int, int)>[];
     if (options.style == CsvStyle.lines) {
@@ -466,21 +464,21 @@ String _paycomCode(PayCode? c, String code) => (c == null || c.paycomCode.trim()
 
 /// A row used only for sorting.
 EntrySheetRow _sortKey(String workerId, Worker? w, DateTime? date) => EntrySheetRow(
-      workerId: workerId,
-      employeeCode: w?.paycomEmployeeCode.trim() ?? '',
-      lastName: w?.lastName ?? '',
-      firstName: w?.firstName ?? '',
-      workDate: date,
-      regularHundredths: 0,
-      regularCents: 0,
-      overtimeHundredths: 0,
-      overtimeCents: 0,
-      codes: const {},
-      bonusCents: 0,
-      tipsCents: 0,
-      grossCents: 0,
-      missingEmployeeCode: false,
-    );
+  workerId: workerId,
+  employeeCode: w?.paycomEmployeeCode.trim() ?? '',
+  lastName: w?.lastName ?? '',
+  firstName: w?.firstName ?? '',
+  workDate: date,
+  regularHundredths: 0,
+  regularCents: 0,
+  overtimeHundredths: 0,
+  overtimeCents: 0,
+  codes: const {},
+  bonusCents: 0,
+  tipsCents: 0,
+  grossCents: 0,
+  missingEmployeeCode: false,
+);
 
 final _digits = RegExp(r'^\d+$');
 

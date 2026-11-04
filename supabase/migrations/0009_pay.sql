@@ -476,7 +476,9 @@ begin
   select settings into v_settings from venues where id = p_venue;
   v_anchor := coalesce((v_settings -> 'pay_period' ->> 'anchor_date')::date, date '2026-01-05');
   v_freq := coalesce(v_settings -> 'pay_period' ->> 'frequency', 'biweekly');
-  v_lag := coalesce((v_settings -> 'pay_period' ->> 'payday_days_after_end')::integer, 5);
+  -- Same lookup as the Dart PayRules: settings.pay first, then settings.pay_period.
+  v_lag := coalesce((v_settings -> 'pay' ->> 'payday_days_after_end')::integer,
+                    (v_settings -> 'pay_period' ->> 'payday_days_after_end')::integer, 5);
   if v_freq not in ('weekly', 'biweekly') then
     raise exception 'Only weekly and every-two-weeks periods are supported so far' using errcode = '22023';
   end if;

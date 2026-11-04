@@ -139,12 +139,14 @@ AgencyBillingResult calculateAgencyBilling({
     problems.addAll(work.problems);
     if (agencyId == null) {
       if (work.pieces.any((p) => inRange(p.date))) {
-        problems.add(PayProblem(
-          kind: PayProblemKind.missingAgency,
-          severity: PayProblemSeverity.blocking,
-          message: 'Temp ${w.displayName} has no agency, so their hours cannot be billed.',
-          workerId: w.id,
-        ));
+        problems.add(
+          PayProblem(
+            kind: PayProblemKind.missingAgency,
+            severity: PayProblemSeverity.blocking,
+            message: 'Temp ${w.displayName} has no agency, so their hours cannot be billed.',
+            workerId: w.id,
+          ),
+        );
       }
       continue;
     }
@@ -160,14 +162,16 @@ AgencyBillingResult calculateAgencyBilling({
             ? null
             : resolveBillRate(agencyId: agencyId, jobRoleCode: role, date: p.date, billRates: billRates);
         if (rate == null && reported.add('${role ?? ''}|${formatDate(p.date)}')) {
-          problems.add(PayProblem(
-            kind: PayProblemKind.missingBillRate,
-            severity: PayProblemSeverity.blocking,
-            message: 'No bill rate for ${role ?? 'no role'} with agency $agencyId on ${formatDate(p.date)}.',
-            workerId: w.id,
-            eventId: p.context.eventId,
-            workDate: p.date,
-          ));
+          problems.add(
+            PayProblem(
+              kind: PayProblemKind.missingBillRate,
+              severity: PayProblemSeverity.blocking,
+              message: 'No bill rate for ${role ?? 'no role'} with agency $agencyId on ${formatDate(p.date)}.',
+              workerId: w.id,
+              eventId: p.context.eventId,
+              workDate: p.date,
+            ),
+          );
         }
         final key = '${p.context.eventId}|${p.context.storefrontId}|$role|${rate?.id}';
         keys.putIfAbsent(key, () => (p.context, rate));
@@ -184,20 +188,24 @@ AgencyBillingResult calculateAgencyBilling({
       final (ctx, rate) = keys[e.key]!;
       final bill = rate?.billRateCents;
       final otBill = rate == null ? null : (rate.overtimeBillRateCents ?? rate.billRateCents);
-      byAgency.putIfAbsent(agencyId, () => []).add(AgencyInvoiceLine(
-            agencyId: agencyId,
-            workerId: w.id,
-            firstWorkDate: e.value.first,
-            eventId: ctx.eventId,
-            storefrontId: ctx.storefrontId,
-            jobRoleCode: ctx.jobRoleCode,
-            regularMinutes: e.value.reg,
-            overtimeMinutes: e.value.ot,
-            billRateCents: bill,
-            overtimeBillRateCents: otBill,
-            regularAmountCents: bill == null ? 0 : amountForMinutes(e.value.reg, bill),
-            overtimeAmountCents: otBill == null ? 0 : amountForMinutes(e.value.ot, otBill),
-          ));
+      byAgency
+          .putIfAbsent(agencyId, () => [])
+          .add(
+            AgencyInvoiceLine(
+              agencyId: agencyId,
+              workerId: w.id,
+              firstWorkDate: e.value.first,
+              eventId: ctx.eventId,
+              storefrontId: ctx.storefrontId,
+              jobRoleCode: ctx.jobRoleCode,
+              regularMinutes: e.value.reg,
+              overtimeMinutes: e.value.ot,
+              billRateCents: bill,
+              overtimeBillRateCents: otBill,
+              regularAmountCents: bill == null ? 0 : amountForMinutes(e.value.reg, bill),
+              overtimeAmountCents: otBill == null ? 0 : amountForMinutes(e.value.ot, otBill),
+            ),
+          );
     }
   }
 
@@ -209,14 +217,15 @@ AgencyBillingResult calculateAgencyBilling({
       for (final id in ids)
         AgencyInvoice(
           agencyId: id,
-          lines: List.unmodifiable(byAgency[id]!
-            ..sort((a, b) {
+          lines: List.unmodifiable(
+            byAgency[id]!..sort((a, b) {
               var c = a.firstWorkDate.compareTo(b.firstWorkDate);
               if (c != 0) return c;
               c = a.workerId.compareTo(b.workerId);
               if (c != 0) return c;
               return (a.eventId ?? '').compareTo(b.eventId ?? '');
-            })),
+            }),
+          ),
         ),
     ],
     problems: List.unmodifiable(problems),

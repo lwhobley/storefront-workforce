@@ -40,7 +40,13 @@ class TipParticipant {
   final bool releasedBeforeArrival;
 }
 
-enum TipExclusionReason { roleNotEligible, roleNotInPoolPoints, workerTypeNotIncluded, noPaidTime, releasedBeforeArrival }
+enum TipExclusionReason {
+  roleNotEligible,
+  roleNotInPoolPoints,
+  workerTypeNotIncluded,
+  noPaidTime,
+  releasedBeforeArrival,
+}
 
 class TipPoolExclusion {
   const TipPoolExclusion(this.workerId, this.jobRoleCode, this.reason);
@@ -123,12 +129,14 @@ TipPoolResult allocateTipPool({
   final problems = <PayProblem>[];
   if (ids.isEmpty) {
     if (pool.amountCents > 0) {
-      problems.add(PayProblem(
-        kind: PayProblemKind.tipPoolNotDistributed,
-        severity: PayProblemSeverity.blocking,
-        message: 'Nobody eligible worked this pool; ${formatCents(pool.amountCents)} is not distributed.',
-        eventId: pool.eventId,
-      ));
+      problems.add(
+        PayProblem(
+          kind: PayProblemKind.tipPoolNotDistributed,
+          severity: PayProblemSeverity.blocking,
+          message: 'Nobody eligible worked this pool; ${formatCents(pool.amountCents)} is not distributed.',
+          eventId: pool.eventId,
+        ),
+      );
     }
     return TipPoolResult(pool: pool, allocations: const [], excluded: excluded, problems: problems);
   }
@@ -144,14 +152,16 @@ TipPoolResult allocateTipPool({
       'equal' => 1000,
       _ => 0,
     };
-    allocations.add(TipAllocation(
-      poolId: pool.id,
-      venueId: pool.venueId,
-      workerId: id,
-      hoursHundredths: minutesToHundredths(m),
-      pointsThousandths: points,
-      amountCents: shares[i],
-    ));
+    allocations.add(
+      TipAllocation(
+        poolId: pool.id,
+        venueId: pool.venueId,
+        workerId: id,
+        hoursHundredths: minutesToHundredths(m),
+        pointsThousandths: points,
+        amountCents: shares[i],
+      ),
+    );
   }
   return TipPoolResult(pool: pool, allocations: List.unmodifiable(allocations), excluded: excluded, problems: problems);
 }
@@ -194,13 +204,15 @@ List<TipParticipant> tipParticipantsFromShifts({
     );
     for (final s in byWorker[wid]!) {
       final group = work.groups.where((g) => g.context.shiftId == s.id).firstOrNull;
-      out.add(TipParticipant(
-        workerId: wid,
-        jobRoleCode: s.jobRoleCode,
-        paidMinutes: work.minutesFor((c) => c.shiftId == s.id),
-        workerType: workers[wid]?.type ?? WorkerType.regular,
-        releasedBeforeArrival: s.status == ShiftStatus.released && !(group?.clockedIn ?? false),
-      ));
+      out.add(
+        TipParticipant(
+          workerId: wid,
+          jobRoleCode: s.jobRoleCode,
+          paidMinutes: work.minutesFor((c) => c.shiftId == s.id),
+          workerType: workers[wid]?.type ?? WorkerType.regular,
+          releasedBeforeArrival: s.status == ShiftStatus.released && !(group?.clockedIn ?? false),
+        ),
+      );
     }
   }
   return out;

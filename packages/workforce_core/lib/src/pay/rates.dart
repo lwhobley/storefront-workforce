@@ -72,17 +72,18 @@ List<PayDifferential> resolveDifferentials({
   required DateTime date,
   required Iterable<PayDifferential> differentials,
 }) {
-  final out = [
-    for (final d in differentials)
-      if (d.isActiveOn(date) &&
-          _matches(d.workerId, workerId) &&
-          _matches(d.jobRoleCode, jobRoleCode) &&
-          _matches(d.eventTypeCode, eventTypeCode))
-        d,
-  ]..sort((a, b) {
-      final c = a.payCode.compareTo(b.payCode);
-      return c != 0 ? c : a.id.compareTo(b.id);
-    });
+  final out =
+      [
+        for (final d in differentials)
+          if (d.isActiveOn(date) &&
+              _matches(d.workerId, workerId) &&
+              _matches(d.jobRoleCode, jobRoleCode) &&
+              _matches(d.eventTypeCode, eventTypeCode))
+            d,
+      ]..sort((a, b) {
+        final c = a.payCode.compareTo(b.payCode);
+        return c != 0 ? c : a.id.compareTo(b.id);
+      });
   return out;
 }
 

@@ -5,16 +5,22 @@ import 'pay_helpers.dart';
 
 void main() {
   AgencyBillRate bill(String id, String agency, String role, int cents, {int? ot, DateTime? from}) => AgencyBillRate(
-      id: id,
-      venueId: 'v1',
-      agencyId: agency,
-      jobRoleCode: role,
-      billRateCents: cents,
-      overtimeBillRateCents: ot,
-      effectiveFrom: from ?? day(2026, 1, 1));
+    id: id,
+    venueId: 'v1',
+    agencyId: agency,
+    jobRoleCode: role,
+    billRateCents: cents,
+    overtimeBillRateCents: ot,
+    effectiveFrom: from ?? day(2026, 1, 1),
+  );
 
   /// A temp working one event per day: (day of November, start hour, end hour).
-  (WorkerPayInput, Map<String, Event>) temp(String id, String agency, List<(int, int, int)> days, {String role = 'cashier'}) {
+  (WorkerPayInput, Map<String, Event>) temp(
+    String id,
+    String agency,
+    List<(int, int, int)> days, {
+    String role = 'cashier',
+  }) {
     final w = worker(id, type: WorkerType.temp, agencyId: agency);
     final shifts = <Shift>[];
     final punches = <Punch>[];
@@ -44,7 +50,11 @@ void main() {
       overtimeRules: texas.overtime,
       from: day(2026, 11, 9),
       to: day(2026, 11, 22),
-      temps: [t1, t2, WorkerPayInput(worker: worker('reg'))],
+      temps: [
+        t1,
+        t2,
+        WorkerPayInput(worker: worker('reg')),
+      ],
       events: {...ev1, ...ev2},
       billRates: rates,
     );
@@ -117,7 +127,10 @@ void main() {
       to: day(2026, 11, 22),
       temps: [t1],
       events: ev1,
-      billRates: [bill('old', 'a1', 'cashier', 2000), bill('new', 'a1', 'cashier', 2200, from: day(2026, 11, 11))],
+      billRates: [
+        bill('old', 'a1', 'cashier', 2000),
+        bill('new', 'a1', 'cashier', 2200, from: day(2026, 11, 11)),
+      ],
     );
     expect(r.invoice('a1')!.lines.map((l) => (l.billRateCents, l.amountCents)), [(2000, 10000), (2200, 11000)]);
   });

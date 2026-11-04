@@ -13,9 +13,14 @@ typedef Spec = ({
   String storefront,
 });
 
-Spec s(String event, String role, DateTime inAt, DateTime outAt,
-        {List<(DateTime, DateTime, BreakKind)> breaks = const [], String storefront = 'sf1'}) =>
-    (event: event, role: role, inAt: inAt, outAt: outAt, breaks: breaks, storefront: storefront);
+Spec s(
+  String event,
+  String role,
+  DateTime inAt,
+  DateTime outAt, {
+  List<(DateTime, DateTime, BreakKind)> breaks = const [],
+  String storefront = 'sf1',
+}) => (event: event, role: role, inAt: inAt, outAt: outAt, breaks: breaks, storefront: storefront);
 
 /// A worker with one shift (and punches tied to it) per spec.
 WorkerPayInput staff(Worker w, List<Spec> specs) {
@@ -30,9 +35,9 @@ WorkerPayInput staff(Worker w, List<Spec> specs) {
 }
 
 Map<String, Event> eventsFor(List<WorkerPayInput> inputs, {Map<String, String> types = const {}}) => {
-      for (final i in inputs)
-        for (final sh in i.shifts) sh.eventId: event(sh.eventId, sh.callTime, type: types[sh.eventId] ?? 'game'),
-    };
+  for (final i in inputs)
+    for (final sh in i.shifts) sh.eventId: event(sh.eventId, sh.callTime, type: types[sh.eventId] ?? 'game'),
+};
 
 final cashier15 = rate('cashier', 1500, role: 'cashier');
 final cook18 = rate('cook', 1800, role: 'cook');
@@ -51,25 +56,25 @@ EarningsResult run(
   Map<String, JobRole> jobRoles = const {},
   Map<String, String> eventTypes = const {},
   Map<String, Event>? events,
-}) =>
-    calculateEarnings(
-      timeZone: tz,
-      venueRules: rules,
-      payRules: pay,
-      period: period ?? novPeriod,
-      workers: inputs,
-      events: events ?? eventsFor(inputs, types: eventTypes),
-      rates: rates ?? [cashier15, cook18, lead15],
-      differentials: differentials,
-      tipPools: tipPools,
-      tipAllocations: tipAllocations,
-      tipCreditWorkers: tipCreditWorkers,
-      jobRoles: jobRoles,
-    );
+}) => calculateEarnings(
+  timeZone: tz,
+  venueRules: rules,
+  payRules: pay,
+  period: period ?? novPeriod,
+  workers: inputs,
+  events: events ?? eventsFor(inputs, types: eventTypes),
+  rates: rates ?? [cashier15, cook18, lead15],
+  differentials: differentials,
+  tipPools: tipPools,
+  tipAllocations: tipAllocations,
+  tipCreditWorkers: tipCreditWorkers,
+  jobRoles: jobRoles,
+);
 
 /// (code, date, hundredths, rateE4, cents) for compact assertions.
-List<(String, String, int, int?, int)> shape(Iterable<PayLine> lines) =>
-    [for (final l in lines) (l.payCode, formatDate(l.workDate), l.hoursHundredths, l.rateE4, l.amountCents)];
+List<(String, String, int, int?, int)> shape(Iterable<PayLine> lines) => [
+  for (final l in lines) (l.payCode, formatDate(l.workDate), l.hoursHundredths, l.rateE4, l.amountCents),
+];
 
 void main() {
   final w1 = worker('w1');
@@ -78,7 +83,7 @@ void main() {
     test('a simple 6-hour shift', () {
       // Tue Nov 10 16:00-22:00 = 6.00h x $15.00 = $90.00.
       final r = run([
-        staff(w1, [s('e10', 'cashier', ct(2026, 11, 10, 16), ct(2026, 11, 10, 22))])
+        staff(w1, [s('e10', 'cashier', ct(2026, 11, 10, 16), ct(2026, 11, 10, 22))]),
       ]);
       expect(shape(r.lines), [('REG', '2026-11-10', 600, 150000, 9000)]);
       final l = r.lines.single;
@@ -96,11 +101,17 @@ void main() {
       // Paid 390 min = 6.50h x $15 = $97.50.
       final r = run([
         staff(w1, [
-          s('e10', 'cashier', ct(2026, 11, 10, 16), ct(2026, 11, 10, 23), breaks: [
-            (ct(2026, 11, 10, 18), ct(2026, 11, 10, 18, 10), BreakKind.rest),
-            (ct(2026, 11, 10, 19, 30), ct(2026, 11, 10, 20), BreakKind.meal),
-          ])
-        ])
+          s(
+            'e10',
+            'cashier',
+            ct(2026, 11, 10, 16),
+            ct(2026, 11, 10, 23),
+            breaks: [
+              (ct(2026, 11, 10, 18), ct(2026, 11, 10, 18, 10), BreakKind.rest),
+              (ct(2026, 11, 10, 19, 30), ct(2026, 11, 10, 20), BreakKind.meal),
+            ],
+          ),
+        ]),
       ]);
       expect(shape(r.lines), [('REG', '2026-11-10', 650, 150000, 9750)]);
       expect(sumCents(r.lines), 9750);
@@ -110,10 +121,14 @@ void main() {
       // 420 min, 20-min meal is paid: 7.00h x $15 = $105.00.
       final r = run([
         staff(w1, [
-          s('e10', 'cashier', ct(2026, 11, 10, 16), ct(2026, 11, 10, 23), breaks: [
-            (ct(2026, 11, 10, 19, 30), ct(2026, 11, 10, 19, 50), BreakKind.meal),
-          ])
-        ])
+          s(
+            'e10',
+            'cashier',
+            ct(2026, 11, 10, 16),
+            ct(2026, 11, 10, 23),
+            breaks: [(ct(2026, 11, 10, 19, 30), ct(2026, 11, 10, 19, 50), BreakKind.meal)],
+          ),
+        ]),
       ]);
       expect(sumCents(r.lines), 10500);
       expect(r.lines.single.hoursHundredths, 700);
@@ -121,9 +136,7 @@ void main() {
 
     test('punches with no event are paid at the default role', () {
       final cook = worker('c1', roles: ['cook']);
-      final r = run([
-        WorkerPayInput(worker: cook, punches: worked('c1', ct(2026, 11, 10, 8), ct(2026, 11, 10, 12)))
-      ]);
+      final r = run([WorkerPayInput(worker: cook, punches: worked('c1', ct(2026, 11, 10, 8), ct(2026, 11, 10, 12)))]);
       // 4h x $18 = $72.00.
       expect(shape(r.lines), [('REG', '2026-11-10', 400, 180000, 7200)]);
       expect(r.lines.single.eventId, isNull);
@@ -137,9 +150,11 @@ void main() {
         punch('w1', PunchKind.clockOut, ct(2026, 11, 10, 22), eventId: 'e10'),
       ];
       final r = run([
-        WorkerPayInput(worker: w1, punches: punches, shifts: [
-          shift('sh', workerId: 'w1', eventId: 'e10', call: ct(2026, 11, 10, 16)),
-        ])
+        WorkerPayInput(
+          worker: w1,
+          punches: punches,
+          shifts: [shift('sh', workerId: 'w1', eventId: 'e10', call: ct(2026, 11, 10, 16))],
+        ),
       ]);
       // 16:00-22:00 = $90.00, not 15:00-23:00.
       expect(sumCents(r.lines), 9000);
@@ -149,16 +164,19 @@ void main() {
     test('open clock-in is reported and not paid; closed shifts are paid', () {
       final input = staff(w1, [s('e9', 'cashier', ct(2026, 11, 9, 16), ct(2026, 11, 9, 22))]);
       final open = punch('w1', PunchKind.clockIn, ct(2026, 11, 10, 16), eventId: 'e10', shiftId: 'sh-open');
-      final r = run([
-        WorkerPayInput(
-          worker: w1,
-          punches: [...input.punches, open],
-          shifts: [...input.shifts, shift('sh-open', workerId: 'w1', eventId: 'e10', call: ct(2026, 11, 10, 16))],
-        )
-      ], events: {
-        'e9': event('e9', ct(2026, 11, 9, 16)),
-        'e10': event('e10', ct(2026, 11, 10, 16)),
-      });
+      final r = run(
+        [
+          WorkerPayInput(
+            worker: w1,
+            punches: [...input.punches, open],
+            shifts: [
+              ...input.shifts,
+              shift('sh-open', workerId: 'w1', eventId: 'e10', call: ct(2026, 11, 10, 16)),
+            ],
+          ),
+        ],
+        events: {'e9': event('e9', ct(2026, 11, 9, 16)), 'e10': event('e10', ct(2026, 11, 10, 16))},
+      );
       expect(shape(r.lines), [('REG', '2026-11-09', 600, 150000, 9000)]);
       final p = r.problems.singleWhere((p) => p.kind == PayProblemKind.openClockIn);
       expect(p.isBlocking, isTrue);
@@ -169,12 +187,21 @@ void main() {
     test('punch needing review is counted and blocks approval', () {
       final punches = [
         punch('w1', PunchKind.clockIn, ct(2026, 11, 10, 16), eventId: 'e10'),
-        punch('w1', PunchKind.clockOut, ct(2026, 11, 10, 22), eventId: 'e10', status: PunchStatus.needsReview, id: 'pr'),
+        punch(
+          'w1',
+          PunchKind.clockOut,
+          ct(2026, 11, 10, 22),
+          eventId: 'e10',
+          status: PunchStatus.needsReview,
+          id: 'pr',
+        ),
       ];
       final r = run([
-        WorkerPayInput(worker: w1, punches: punches, shifts: [
-          shift('sh', workerId: 'w1', eventId: 'e10', call: ct(2026, 11, 10, 16)),
-        ])
+        WorkerPayInput(
+          worker: w1,
+          punches: punches,
+          shifts: [shift('sh', workerId: 'w1', eventId: 'e10', call: ct(2026, 11, 10, 16))],
+        ),
       ]);
       expect(sumCents(r.lines), 9000);
       final p = r.problems.single;
@@ -199,7 +226,7 @@ void main() {
 
     test('missing rate: line with rate null and \$0, blocking problem', () {
       final r = run([
-        staff(w1, [s('e10', 'runner', ct(2026, 11, 10, 16), ct(2026, 11, 10, 22))])
+        staff(w1, [s('e10', 'runner', ct(2026, 11, 10, 16), ct(2026, 11, 10, 22))]),
       ]);
       expect(shape(r.lines), [('REG', '2026-11-10', 600, null, 0)]);
       final p = r.problems.single;
@@ -209,9 +236,12 @@ void main() {
     });
 
     test('rate below minimum wage is blocking', () {
-      final r = run([
-        staff(w1, [s('e10', 'cashier', ct(2026, 11, 10, 16), ct(2026, 11, 10, 22))])
-      ], rates: [rate('low', 700, role: 'cashier')]);
+      final r = run(
+        [
+          staff(w1, [s('e10', 'cashier', ct(2026, 11, 10, 16), ct(2026, 11, 10, 22))]),
+        ],
+        rates: [rate('low', 700, role: 'cashier')],
+      );
       expect(r.problems.single.kind, PayProblemKind.belowMinimumWage);
       expect(sumCents(r.lines), 4200);
     });
@@ -222,7 +252,7 @@ void main() {
         staff(w1, [
           s('eA', 'cashier', ct(2026, 11, 10, 16), ct(2026, 11, 10, 20)),
           s('eB', 'cashier', ct(2026, 11, 10, 18), ct(2026, 11, 10, 22)),
-        ])
+        ]),
       ]);
       expect(sumCents(r.lines), 9000);
       expect({for (final l in r.lines) l.eventId: l.hoursHundredths}, {'eA': 400, 'eB': 200});
@@ -246,7 +276,7 @@ void main() {
           s('e11', 'cook', ct(2026, 11, 11, 10), ct(2026, 11, 11, 20)),
           s('e12', 'cook', ct(2026, 11, 12, 10), ct(2026, 11, 12, 20)),
           s('e13', 'cashier', ct(2026, 11, 13, 10), ct(2026, 11, 13, 15)),
-        ])
+        ]),
       ]);
       expect(shape(r.lines), [
         ('REG', '2026-11-09', 1000, 150000, 15000),
@@ -283,7 +313,7 @@ void main() {
           s('e11', 'cashier', ct(2026, 11, 11, 10), ct(2026, 11, 11, 15)),
           s('e12', 'cook', ct(2026, 11, 12, 10), ct(2026, 11, 12, 20)),
           s('e13', 'cook', ct(2026, 11, 13, 10), ct(2026, 11, 13, 20)),
-        ])
+        ]),
       ]);
       expect(shape(r.lines), [
         ('REG', '2026-11-09', 1000, 150000, 15000),
@@ -303,15 +333,22 @@ void main() {
       // REG 40h = $600 (Thu 7h = 105). OT line 4 x 15 + 34 = $94 (rate 23.50).
       // LEAD on all 44h = $88 (4 lines of 11h x 2 = $22). OT hour total: 15 + 2 + 8.50 = 25.50 = 1.5 x 17.
       final lead = worker('L1', roles: ['lead']);
-      final r = run([
-        staff(lead, [
-          for (var d = 9; d <= 12; d++) s('e$d', 'lead', ct(2026, 11, d, 9), ct(2026, 11, d, 20)),
-        ])
-      ], differentials: [
-        PayDifferential(
-            id: 'lead', venueId: 'v1', name: 'Lead', payCode: 'LEAD', jobRoleCode: 'lead', perHourCents: 200,
-            effectiveFrom: day(2026, 1, 1)),
-      ]);
+      final r = run(
+        [
+          staff(lead, [for (var d = 9; d <= 12; d++) s('e$d', 'lead', ct(2026, 11, d, 9), ct(2026, 11, d, 20))]),
+        ],
+        differentials: [
+          PayDifferential(
+            id: 'lead',
+            venueId: 'v1',
+            name: 'Lead',
+            payCode: 'LEAD',
+            jobRoleCode: 'lead',
+            perHourCents: 200,
+            effectiveFrom: day(2026, 1, 1),
+          ),
+        ],
+      );
       expect(shape(r.lines), [
         ('REG', '2026-11-09', 1100, 150000, 16500),
         ('LEAD', '2026-11-09', 1100, 20000, 2200),
@@ -332,18 +369,26 @@ void main() {
       // Straight: 42 x 15 = 630 + 21 = $651; regular rate 651 / 42 = $15.50.
       // OT 2h (the concert): 2 x 15 + 2 x 0.5 x 15.50 = 30 + 15.50 = $45.50 (rate 22.75).
       // Gross 600 + 45.50 + 21 = $666.50.
-      final r = run([
-        staff(w1, [
-          for (var d = 9; d <= 12; d++) s('e$d', 'cashier', ct(2026, 11, d, 9), ct(2026, 11, d, 19)),
-          s('c13', 'cashier', ct(2026, 11, 13, 17), ct(2026, 11, 13, 19)),
-        ])
-      ], eventTypes: {
-        'c13': 'concert'
-      }, differentials: [
-        PayDifferential(
-            id: 'cb', venueId: 'v1', name: 'Concert bonus', payCode: 'BONUS', eventTypeCode: 'concert',
-            perShiftCents: 2100, effectiveFrom: day(2026, 1, 1)),
-      ]);
+      final r = run(
+        [
+          staff(w1, [
+            for (var d = 9; d <= 12; d++) s('e$d', 'cashier', ct(2026, 11, d, 9), ct(2026, 11, d, 19)),
+            s('c13', 'cashier', ct(2026, 11, 13, 17), ct(2026, 11, 13, 19)),
+          ]),
+        ],
+        eventTypes: {'c13': 'concert'},
+        differentials: [
+          PayDifferential(
+            id: 'cb',
+            venueId: 'v1',
+            name: 'Concert bonus',
+            payCode: 'BONUS',
+            eventTypeCode: 'concert',
+            perShiftCents: 2100,
+            effectiveFrom: day(2026, 1, 1),
+          ),
+        ],
+      );
       expect(shape(r.lines).where((l) => l.$2 == '2026-11-13'), [
         ('OT', '2026-11-13', 200, 227500, 4550),
         ('BONUS', '2026-11-13', 0, null, 2100),
@@ -355,25 +400,30 @@ void main() {
 
     test('per-shift bonus without overtime', () {
       // 6h concert: 90 + 21 = $111.00.
-      final r = run([
-        staff(w1, [s('c10', 'cashier', ct(2026, 11, 10, 16), ct(2026, 11, 10, 22))])
-      ], eventTypes: {
-        'c10': 'concert'
-      }, differentials: [
-        PayDifferential(
-            id: 'cb', venueId: 'v1', name: 'Concert bonus', payCode: 'BONUS', eventTypeCode: 'concert',
-            perShiftCents: 2100, effectiveFrom: day(2026, 1, 1)),
-      ]);
-      expect(shape(r.lines), [
-        ('REG', '2026-11-10', 600, 150000, 9000),
-        ('BONUS', '2026-11-10', 0, null, 2100),
-      ]);
+      final r = run(
+        [
+          staff(w1, [s('c10', 'cashier', ct(2026, 11, 10, 16), ct(2026, 11, 10, 22))]),
+        ],
+        eventTypes: {'c10': 'concert'},
+        differentials: [
+          PayDifferential(
+            id: 'cb',
+            venueId: 'v1',
+            name: 'Concert bonus',
+            payCode: 'BONUS',
+            eventTypeCode: 'concert',
+            perShiftCents: 2100,
+            effectiveFrom: day(2026, 1, 1),
+          ),
+        ],
+      );
+      expect(shape(r.lines), [('REG', '2026-11-10', 600, 150000, 9000), ('BONUS', '2026-11-10', 0, null, 2100)]);
       expect(sumCents(r.lines), 11100);
     });
 
     test('exactly 40.00 hours has no overtime', () {
       final r = run([
-        staff(w1, [for (var d = 9; d <= 13; d++) s('e$d', 'cashier', ct(2026, 11, d, 9), ct(2026, 11, d, 17))])
+        staff(w1, [for (var d = 9; d <= 13; d++) s('e$d', 'cashier', ct(2026, 11, d, 9), ct(2026, 11, d, 17))]),
       ]);
       expect(linesOf(r.lines, 'OT'), isEmpty);
       expect(sumCents(r.lines), 60000);
@@ -387,7 +437,7 @@ void main() {
         staff(w1, [
           for (var d = 9; d <= 12; d++) s('e$d', 'cashier', ct(2026, 11, d, 9), ct(2026, 11, d, 17)),
           s('e13', 'cashier', ct(2026, 11, 13, 9), ct(2026, 11, 13, 17, 1)),
-        ])
+        ]),
       ]);
       expect(shape(r.lines).last, ('OT', '2026-11-13', 2, 225000, 38));
       expect(linesOf(r.lines, 'REG').map((l) => l.amountCents), [12000, 12000, 12000, 12000, 12000]);
@@ -400,12 +450,9 @@ void main() {
       // Daily 8h: one 10h day -> REG 8h $120, OT the last 2h at $22.50 = $45. Total $165.
       const daily = VenueRules(overtime: OvertimeRules(dailyThresholdHours: 8));
       final r = run([
-        staff(w1, [s('e10', 'cashier', ct(2026, 11, 10, 9), ct(2026, 11, 10, 19))])
+        staff(w1, [s('e10', 'cashier', ct(2026, 11, 10, 9), ct(2026, 11, 10, 19))]),
       ], rules: daily);
-      expect(shape(r.lines), [
-        ('REG', '2026-11-10', 800, 150000, 12000),
-        ('OT', '2026-11-10', 200, 225000, 4500),
-      ]);
+      expect(shape(r.lines), [('REG', '2026-11-10', 800, 150000, 12000), ('OT', '2026-11-10', 200, 225000, 4500)]);
       expect(sumCents(r.lines), 16500);
     });
   });
@@ -414,13 +461,12 @@ void main() {
     test('remainder goes on the last REG line when there is no OT', () {
       // $10.01/h, three 20-minute shifts: each 333.67c -> 334c, sum 1002c; exact week 60 min = 1001c.
       // The last REG line (Wed) takes -1c. Hours: 0.3333 each -> 0.34 / 0.33 / 0.33 = 1.00 total.
-      final r = run([
-        staff(w1, [
-          for (var d = 9; d <= 11; d++) s('e$d', 'cashier', ct(2026, 11, d, 16), ct(2026, 11, d, 16, 20)),
-        ])
-      ], rates: [
-        rate('odd', 1001, role: 'cashier')
-      ]);
+      final r = run(
+        [
+          staff(w1, [for (var d = 9; d <= 11; d++) s('e$d', 'cashier', ct(2026, 11, d, 16), ct(2026, 11, d, 16, 20))]),
+        ],
+        rates: [rate('odd', 1001, role: 'cashier')],
+      );
       expect(shape(r.lines), [
         ('REG', '2026-11-09', 34, 100100, 334),
         ('REG', '2026-11-10', 33, 100100, 334),
@@ -435,15 +481,16 @@ void main() {
       // $10.01/h; Mon-Thu 10h (4 x $100.10) + Sat 1h + Sun 1h = 42h, OT = Sat and Sun.
       // Each OT hour: 10.01 + 5.005 = $15.015 -> $15.02; exact OT 2 x 15.015 = $30.03.
       // Week exact 400.40 + 30.03 = $430.43; lines 400.40 + 15.02 + 15.02 = 430.44 -> Sun takes -1c.
-      final r = run([
-        staff(w1, [
-          for (var d = 9; d <= 12; d++) s('e$d', 'cashier', ct(2026, 11, d, 9), ct(2026, 11, d, 19)),
-          s('e14', 'cashier', ct(2026, 11, 14, 12), ct(2026, 11, 14, 13)),
-          s('e15', 'cashier', ct(2026, 11, 15, 12), ct(2026, 11, 15, 13)),
-        ])
-      ], rates: [
-        rate('odd', 1001, role: 'cashier')
-      ]);
+      final r = run(
+        [
+          staff(w1, [
+            for (var d = 9; d <= 12; d++) s('e$d', 'cashier', ct(2026, 11, d, 9), ct(2026, 11, d, 19)),
+            s('e14', 'cashier', ct(2026, 11, 14, 12), ct(2026, 11, 14, 13)),
+            s('e15', 'cashier', ct(2026, 11, 15, 12), ct(2026, 11, 15, 13)),
+          ]),
+        ],
+        rates: [rate('odd', 1001, role: 'cashier')],
+      );
       final ot = linesOf(r.lines, 'OT');
       expect(ot.map((l) => l.amountCents), [1502, 1501]);
       expect(ot.last.roundingAdjustmentCents, -1);
@@ -456,9 +503,7 @@ void main() {
       // Three 5h20m shifts: 5.3333h each; rounded alone 5.33 x 3 = 15.99, but true total is 16.00.
       // Amounts: 320 min x $15 = $80.00 each.
       final r = run([
-        staff(w1, [
-          for (var d = 9; d <= 11; d++) s('e$d', 'cashier', ct(2026, 11, d, 16), ct(2026, 11, d, 21, 20)),
-        ])
+        staff(w1, [for (var d = 9; d <= 11; d++) s('e$d', 'cashier', ct(2026, 11, d, 16), ct(2026, 11, d, 21, 20))]),
       ]);
       expect(r.lines.map((l) => l.hoursHundredths), [534, 533, 533]);
       expect(r.worker('w1')!.byPayCode['REG']!.hoursHundredths, 1600);
@@ -475,16 +520,13 @@ void main() {
         staff(w1, [
           for (var d = 9; d <= 12; d++) s('e$d', 'cashier', ct(2026, 11, d, 9), ct(2026, 11, d, 19)),
           s('late', 'cashier', ct(2026, 11, 15, 20), ct(2026, 11, 16, 4)),
-        ])
+        ]),
       ]);
       final late = [
         for (final l in r.lines)
-          if (l.eventId == 'late') l
+          if (l.eventId == 'late') l,
       ];
-      expect(shape(late), [
-        ('OT', '2026-11-15', 400, 225000, 9000),
-        ('REG', '2026-11-16', 400, 150000, 6000),
-      ]);
+      expect(shape(late), [('OT', '2026-11-15', 400, 225000, 9000), ('REG', '2026-11-16', 400, 150000, 6000)]);
       expect(sumCents(r.lines), 75000);
       expect(r.worker('w1')!.weeks.length, 2);
       expect(r.worker('w1')!.weeks[1].overtimeMinutes, 0);
@@ -500,11 +542,11 @@ void main() {
         staff(w1, [
           for (var d = 26; d <= 29; d++) s('e$d', 'cashier', ct(2026, 10, d, 9), ct(2026, 10, d, 18)),
           s('dst', 'cashier', ct(2026, 10, 31, 22), ct(2026, 11, 1, 6)),
-        ])
+        ]),
       ], period: period);
       final dst = [
         for (final l in r.lines)
-          if (l.eventId == 'dst') l
+          if (l.eventId == 'dst') l,
       ];
       expect(shape(dst), [
         ('REG', '2026-10-31', 200, 150000, 3000),
@@ -548,21 +590,20 @@ void main() {
         TipPool(id: id, venueId: 'v1', eventId: eventId, amountCents: cents, storefrontId: storefront);
     TipAllocation alloc(String poolId, String workerId, int cents) =>
         TipAllocation(poolId: poolId, venueId: 'v1', workerId: workerId, amountCents: cents);
-    final threeDays = [
-      for (var d = 9; d <= 11; d++) s('e$d', 'bartender', ct(2026, 11, d, 10), ct(2026, 11, d, 20)),
-    ];
+    final threeDays = [for (var d = 9; d <= 11; d++) s('e$d', 'bartender', ct(2026, 11, d, 10), ct(2026, 11, d, 20))];
 
     test('one TIPS line per worker per date, amount only', () {
       // Two pools at the same event (two storefronts): $30 + $20 -> one $50 line on Mon.
-      final r = run([
-        staff(w1, [s('e9', 'cashier', ct(2026, 11, 9, 16), ct(2026, 11, 9, 22))])
-      ], tipPools: [
-        pool('p1', 'e9', 3000, storefront: 'sf1'),
-        pool('p2', 'e9', 2000, storefront: 'sf2'),
-      ], tipAllocations: [
-        alloc('p1', 'w1', 3000),
-        alloc('p2', 'w1', 2000),
-      ]);
+      final r = run(
+        [
+          staff(w1, [s('e9', 'cashier', ct(2026, 11, 9, 16), ct(2026, 11, 9, 22))]),
+        ],
+        tipPools: [
+          pool('p1', 'e9', 3000, storefront: 'sf1'),
+          pool('p2', 'e9', 2000, storefront: 'sf2'),
+        ],
+        tipAllocations: [alloc('p1', 'w1', 3000), alloc('p2', 'w1', 2000)],
+      );
       final tips = linesOf(r.lines, 'TIPS').single;
       expect(tips.amountCents, 5000);
       expect(tips.hoursHundredths, 0);
@@ -576,13 +617,13 @@ void main() {
 
     test('tips allocated to a temp are reported, not paid', () {
       final temp = worker('t1', type: WorkerType.temp);
-      final r = run([
-        staff(temp, [s('e9', 'cashier', ct(2026, 11, 9, 16), ct(2026, 11, 9, 22))])
-      ], tipPools: [
-        pool('p1', 'e9', 3000)
-      ], tipAllocations: [
-        alloc('p1', 't1', 3000)
-      ]);
+      final r = run(
+        [
+          staff(temp, [s('e9', 'cashier', ct(2026, 11, 9, 16), ct(2026, 11, 9, 22))]),
+        ],
+        tipPools: [pool('p1', 'e9', 3000)],
+        tipAllocations: [alloc('p1', 't1', 3000)],
+      );
       expect(r.lines, isEmpty);
       expect(r.problems.single.kind, PayProblemKind.tipsForNonPayrollWorker);
     });
@@ -590,17 +631,14 @@ void main() {
     test('tip credit make-up when tips do not cover the credit', () {
       // 30h bartending at cash wage $2.13 = $63.90. Credit taken 30 x 5.12 = $153.60; tips $100.
       // TIPMU = 153.60 - 100 = $53.60. Check: 63.90 + 100 + 53.60 = $217.50 = 30 x 7.25.
-      final r = run([
-        staff(bartender, threeDays)
-      ], pay: tipCreditOn, tipCreditWorkers: {
-        'b1'
-      }, tipPools: [
-        pool('p1', 'e9', 10000)
-      ], tipAllocations: [
-        alloc('p1', 'b1', 10000)
-      ], rates: [
-        rate('bt', 1000, role: 'bartender')
-      ]);
+      final r = run(
+        [staff(bartender, threeDays)],
+        pay: tipCreditOn,
+        tipCreditWorkers: {'b1'},
+        tipPools: [pool('p1', 'e9', 10000)],
+        tipAllocations: [alloc('p1', 'b1', 10000)],
+        rates: [rate('bt', 1000, role: 'bartender')],
+      );
       expect(shape(r.lines), [
         ('REG', '2026-11-09', 1000, 21300, 2130),
         ('TIPS', '2026-11-09', 0, null, 10000),
@@ -616,12 +654,14 @@ void main() {
     });
 
     test('no make-up when tips cover the credit', () {
-      final r = run([staff(bartender, threeDays)],
-          pay: tipCreditOn,
-          tipCreditWorkers: {'b1'},
-          tipPools: [pool('p1', 'e9', 20000)],
-          tipAllocations: [alloc('p1', 'b1', 20000)],
-          rates: [rate('bt', 1000, role: 'bartender')]);
+      final r = run(
+        [staff(bartender, threeDays)],
+        pay: tipCreditOn,
+        tipCreditWorkers: {'b1'},
+        tipPools: [pool('p1', 'e9', 20000)],
+        tipAllocations: [alloc('p1', 'b1', 20000)],
+        rates: [rate('bt', 1000, role: 'bartender')],
+      );
       expect(linesOf(r.lines, 'TIPMU'), isEmpty);
       expect(sumCents(r.lines), 6390 + 20000);
     });
@@ -629,19 +669,22 @@ void main() {
     test('tip credit only for listed workers, only when the venue enables it, only in tipped roles', () {
       final rates = [rate('bt', 1000, role: 'bartender'), cook18];
       // Not in the set: full rate, 30h x $10.
-      expect(
-          sumCents(run([staff(bartender, threeDays)], pay: tipCreditOn, rates: rates).lines), 30000);
+      expect(sumCents(run([staff(bartender, threeDays)], pay: tipCreditOn, rates: rates).lines), 30000);
       // Venue switch off: full rate.
       expect(sumCents(run([staff(bartender, threeDays)], tipCreditWorkers: {'b1'}, rates: rates).lines), 30000);
       // Cook hours (not tipped) are paid at the cook rate even for a tip-credit worker.
-      final r = run([
-        staff(bartender, [s('e9', 'cook', ct(2026, 11, 9, 10), ct(2026, 11, 9, 14))])
-      ], pay: tipCreditOn, tipCreditWorkers: {
-        'b1'
-      }, rates: rates, jobRoles: {
-        'cook': const JobRole(venueId: 'v1', code: 'cook', name: 'Cook'),
-        'bartender': const JobRole(venueId: 'v1', code: 'bartender', name: 'Bartender', tipped: true),
-      });
+      final r = run(
+        [
+          staff(bartender, [s('e9', 'cook', ct(2026, 11, 9, 10), ct(2026, 11, 9, 14))]),
+        ],
+        pay: tipCreditOn,
+        tipCreditWorkers: {'b1'},
+        rates: rates,
+        jobRoles: {
+          'cook': const JobRole(venueId: 'v1', code: 'cook', name: 'Cook'),
+          'bartender': const JobRole(venueId: 'v1', code: 'bartender', name: 'Bartender', tipped: true),
+        },
+      );
       expect(shape(r.lines), [('REG', '2026-11-09', 400, 180000, 7200)]);
     });
 
@@ -649,20 +692,19 @@ void main() {
       // Mon-Thu 10h + Fri 2h bartending = 42h; tips $500 (cover the credit).
       // REG 40h x 2.13 = $85.20. OT per hour = 2.13 + 0.5 x 7.25 = $5.755 = 1.5 x 7.25 - 5.12.
       // OT 2h = $11.51. Wages $96.71 + tips $500.
-      final r = run([
-        staff(bartender, [
-          for (var d = 9; d <= 12; d++) s('e$d', 'bartender', ct(2026, 11, d, 9), ct(2026, 11, d, 19)),
-          s('e13', 'bartender', ct(2026, 11, 13, 17), ct(2026, 11, 13, 19)),
-        ])
-      ], pay: tipCreditOn, tipCreditWorkers: {
-        'b1'
-      }, tipPools: [
-        pool('p1', 'e9', 50000)
-      ], tipAllocations: [
-        alloc('p1', 'b1', 50000)
-      ], rates: [
-        rate('bt', 1000, role: 'bartender')
-      ]);
+      final r = run(
+        [
+          staff(bartender, [
+            for (var d = 9; d <= 12; d++) s('e$d', 'bartender', ct(2026, 11, d, 9), ct(2026, 11, d, 19)),
+            s('e13', 'bartender', ct(2026, 11, 13, 17), ct(2026, 11, 13, 19)),
+          ]),
+        ],
+        pay: tipCreditOn,
+        tipCreditWorkers: {'b1'},
+        tipPools: [pool('p1', 'e9', 50000)],
+        tipAllocations: [alloc('p1', 'b1', 50000)],
+        rates: [rate('bt', 1000, role: 'bartender')],
+      );
       final ot = linesOf(r.lines, 'OT').single;
       expect(ot.rateE4, 57550);
       expect(ot.amountCents, 1151);
@@ -675,11 +717,104 @@ void main() {
     });
   });
 
+  test('punches at an event with no shift: default role, warning', () {
+    final r = run(
+      [
+        WorkerPayInput(
+          worker: worker('c1', roles: ['cook']),
+          punches: worked('c1', ct(2026, 11, 10, 16), ct(2026, 11, 10, 20), eventId: 'e10'),
+        ),
+      ],
+      events: {'e10': event('e10', ct(2026, 11, 10, 19))},
+    );
+    // 4h at the cook rate $18 = $72.
+    expect(shape(r.lines), [('REG', '2026-11-10', 400, 180000, 7200)]);
+    expect(r.lines.single.eventId, 'e10');
+    expect(r.lines.single.storefrontId, isNull);
+    expect(r.problems.single.kind, PayProblemKind.noShiftForEvent);
+    expect(r.hasBlockingProblems, isFalse);
+  });
+
+  test('end to end: earnings, entry sheet, CSV and labor cost all reconcile', () {
+    // Two-roles week from above ($775.83) plus a lead with LEAD $2 ($782.00) and $50 tips for w1.
+    final lead = worker('L1', roles: ['lead'], first: 'Lee', last: 'Zane', code: '20');
+    final cashierCook = worker('w1', first: 'Ann', last: 'Able', code: '10');
+    final inputs = [
+      staff(cashierCook, [
+        s('e9', 'cashier', ct(2026, 11, 9, 10), ct(2026, 11, 9, 20)),
+        s('e10', 'cashier', ct(2026, 11, 10, 10), ct(2026, 11, 10, 20)),
+        s('e11', 'cook', ct(2026, 11, 11, 10), ct(2026, 11, 11, 20)),
+        s('e12', 'cook', ct(2026, 11, 12, 10), ct(2026, 11, 12, 20)),
+        s('e13', 'cashier', ct(2026, 11, 13, 10), ct(2026, 11, 13, 15)),
+      ]),
+      staff(lead, [for (var d = 9; d <= 12; d++) s('e$d', 'lead', ct(2026, 11, d, 9), ct(2026, 11, d, 20))]),
+    ];
+    final events = eventsFor(inputs);
+    final r = run(
+      inputs,
+      events: events,
+      differentials: [
+        PayDifferential(
+          id: 'lead',
+          venueId: 'v1',
+          name: 'Lead',
+          payCode: 'LEAD',
+          jobRoleCode: 'lead',
+          perHourCents: 200,
+          effectiveFrom: day(2026, 1, 1),
+        ),
+      ],
+      tipPools: [TipPool(id: 'p', venueId: 'v1', eventId: 'e9', amountCents: 5000)],
+      tipAllocations: [const TipAllocation(poolId: 'p', venueId: 'v1', workerId: 'w1', amountCents: 5000)],
+    );
+    expect(r.hasBlockingProblems, isFalse);
+    expect(r.worker('w1')!.grossCents, 77583 + 5000);
+    expect(r.worker('L1')!.grossCents, 78200);
+    expect(r.totalCents, 77583 + 5000 + 78200);
+
+    final workers = {'w1': cashierCook, 'L1': lead};
+    final sheet = const PaycomExporter().entrySheet(
+      period: novPeriod,
+      lines: r.lines,
+      workers: workers,
+      payCodes: const [],
+    );
+    expect(sheet.rows.map((x) => x.lastName), ['Able', 'Zane']);
+    expect(sheet.totals.grossCents, r.totalCents);
+    expect(sheet.rows.first.tipsCents, 5000);
+    expect(sheet.rows.first.regularHundredths + sheet.rows.first.overtimeHundredths, 4500);
+    expect(sheet.rows.last.codes['LEAD'], (hundredths: 4400, cents: 8800));
+
+    final csv = const PaycomExporter().csv(period: novPeriod, lines: r.lines, workers: workers, payCodes: const []);
+    expect(csv.totalAmountCents, r.totalCents);
+    expect(csv.rowCount, r.lines.length);
+    expect(csv.workedHoursHundredths, 4500 + 4400);
+
+    // Labor cost of Monday's event e9: w1 $150 REG (+ $50 tips separate); lead $165 REG + $22 LEAD.
+    final cost = calculateLaborCost(
+      event: events['e9']!,
+      payRules: PayRules.texasDefaults,
+      payLines: r.lines,
+      eventBudgetCents: 30000,
+    );
+    expect(cost.total.payrollCents, 15000 + 16500 + 2200);
+    expect(cost.total.tipsCents, 5000);
+    expect(cost.total.status, BudgetStatus.over);
+  });
+
   test('JSON lines can be sent to approve_pay_period', () {
-    final r = run([
-      staff(w1, [s('e10', 'cashier', ct(2026, 11, 10, 16), ct(2026, 11, 10, 22))])
-    ], period: PayPeriod(
-        id: 'pp1', venueId: 'v1', startsOn: day(2026, 11, 9), endsOn: day(2026, 11, 22), payDate: day(2026, 11, 27)));
+    final r = run(
+      [
+        staff(w1, [s('e10', 'cashier', ct(2026, 11, 10, 16), ct(2026, 11, 10, 22))]),
+      ],
+      period: PayPeriod(
+        id: 'pp1',
+        venueId: 'v1',
+        startsOn: day(2026, 11, 9),
+        endsOn: day(2026, 11, 22),
+        payDate: day(2026, 11, 27),
+      ),
+    );
     expect(r.lines.single.toJson(), {
       'venue_id': 'v1',
       'pay_period_id': 'pp1',

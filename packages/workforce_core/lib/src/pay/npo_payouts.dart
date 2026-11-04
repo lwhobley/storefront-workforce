@@ -90,13 +90,15 @@ NpoPayoutResult calculateNpoPayout({
   final date = localDateOf(event.startTime, timeZone);
   final agreement = resolveNpoAgreement(npoGroupId: npoGroupId, date: date, agreements: agreements);
   if (agreement == null) {
-    problems.add(PayProblem(
-      kind: PayProblemKind.missingNpoAgreement,
-      severity: PayProblemSeverity.blocking,
-      message: 'No NPO agreement (group or venue default) on ${formatDate(date)}.',
-      eventId: event.id,
-      workDate: date,
-    ));
+    problems.add(
+      PayProblem(
+        kind: PayProblemKind.missingNpoAgreement,
+        severity: PayProblemSeverity.blocking,
+        message: 'No NPO agreement (group or venue default) on ${formatDate(date)}.',
+        eventId: event.id,
+        workDate: date,
+      ),
+    );
   }
 
   var scheduled = 0, worked = 0, noShows = 0, totalMinutes = 0;
@@ -232,8 +234,10 @@ NpoSeasonStatement npoSeasonStatement(String npoGroupId, Iterable<NpoPayout> pay
   final byStatus = <String, NpoStatusTotal>{};
   for (final p in mine) {
     final prev = byStatus[p.status];
-    byStatus[p.status] =
-        NpoStatusTotal(count: (prev?.count ?? 0) + 1, totalCents: (prev?.totalCents ?? 0) + p.totalCents);
+    byStatus[p.status] = NpoStatusTotal(
+      count: (prev?.count ?? 0) + 1,
+      totalCents: (prev?.totalCents ?? 0) + p.totalCents,
+    );
   }
   return NpoSeasonStatement(
     npoGroupId: npoGroupId,

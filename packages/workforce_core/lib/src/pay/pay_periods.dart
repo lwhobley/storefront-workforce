@@ -57,12 +57,7 @@ PayPeriod periodContaining(
     default:
       throw ArgumentError.value(rules.frequency, 'frequency', 'must be one of $payPeriodFrequencies');
   }
-  return PayPeriod(
-    venueId: venueId,
-    startsOn: start,
-    endsOn: end,
-    payDate: addCalendarDays(end, paydayDaysAfterEnd),
-  );
+  return PayPeriod(venueId: venueId, startsOn: start, endsOn: end, payDate: addCalendarDays(end, paydayDaysAfterEnd));
 }
 
 /// Every pay period that overlaps [from]..[to] (inclusive), in order.
@@ -91,14 +86,13 @@ List<PayPeriod> generatePayPeriodsFor({
   required DateTime from,
   required DateTime to,
   String? venueId,
-}) =>
-    generatePayPeriods(
-      rules: venueRules.payPeriod,
-      paydayDaysAfterEnd: payRules.paydayDaysAfterEnd,
-      from: from,
-      to: to,
-      venueId: venueId,
-    );
+}) => generatePayPeriods(
+  rules: venueRules.payPeriod,
+  paydayDaysAfterEnd: payRules.paydayDaysAfterEnd,
+  from: from,
+  to: to,
+  venueId: venueId,
+);
 
 enum ComplianceSeverity { error, warning, info }
 
@@ -122,38 +116,57 @@ List<ComplianceNote> payPeriodComplianceNotes({
 }) {
   final notes = <ComplianceNote>[];
   if (!payPeriodFrequencies.contains(rules.frequency)) {
-    notes.add(ComplianceNote(ComplianceSeverity.error, 'unknown_frequency',
-        'Unknown pay frequency "${rules.frequency}". Use weekly, biweekly, or semimonthly.'));
+    notes.add(
+      ComplianceNote(
+        ComplianceSeverity.error,
+        'unknown_frequency',
+        'Unknown pay frequency "${rules.frequency}". Use weekly, biweekly, or semimonthly.',
+      ),
+    );
     return notes;
   }
   if (rules.frequency == 'monthly') {
-    notes.add(const ComplianceNote(
+    notes.add(
+      const ComplianceNote(
         ComplianceSeverity.warning,
         'texas_payday_law_monthly',
         'Texas Payday Law (Tex. Lab. Code 61.011) requires paying non-exempt employees at least twice a month. '
             'Monthly pay is allowed only for exempt employees; hourly concessions staff need weekly, biweekly, '
-            'or semimonthly pay.'));
+            'or semimonthly pay.',
+      ),
+    );
   }
   if (payRules.paydayDaysAfterEnd < 0) {
-    notes.add(const ComplianceNote(
-        ComplianceSeverity.error, 'payday_before_period_end', 'Payday cannot be before the end of the pay period.'));
+    notes.add(
+      const ComplianceNote(
+        ComplianceSeverity.error,
+        'payday_before_period_end',
+        'Payday cannot be before the end of the pay period.',
+      ),
+    );
   }
   if (rules.frequency == 'weekly' || rules.frequency == 'biweekly') {
     final anchor = DateTime.parse(rules.anchorDate);
     if (DateTime.utc(anchor.year, anchor.month, anchor.day).weekday != overtime.workweekStartDay) {
-      notes.add(const ComplianceNote(
+      notes.add(
+        const ComplianceNote(
           ComplianceSeverity.warning,
           'period_not_aligned_to_workweek',
           'The pay period anchor is not on the first day of the workweek, so workweeks straddle pay periods. '
-              'Overtime is still figured per workweek, but each week is split across two payrolls.'));
+              'Overtime is still figured per workweek, but each week is split across two payrolls.',
+        ),
+      );
     }
   } else {
-    notes.add(ComplianceNote(
+    notes.add(
+      ComplianceNote(
         ComplianceSeverity.info,
         'workweeks_straddle_periods',
         '${rules.frequency == 'semimonthly' ? 'Semimonthly' : 'Monthly'} periods do not line up with workweeks. '
             'Overtime is figured per workweek, so a week that crosses the period end is paid across two payrolls. '
-            'The database function ensure_pay_periods supports only weekly and biweekly so far.'));
+            'The database function ensure_pay_periods supports only weekly and biweekly so far.',
+      ),
+    );
   }
   return notes;
 }

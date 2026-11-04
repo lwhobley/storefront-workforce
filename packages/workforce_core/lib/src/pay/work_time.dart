@@ -79,16 +79,17 @@ class WorkPiece {
   int get minutes => end.difference(start).inMinutes;
 
   WorkPiece _copy({DateTime? start, DateTime? end, bool? overtime}) => WorkPiece(
-        workerId: workerId,
-        start: start ?? this.start,
-        end: end ?? this.end,
-        date: date,
-        context: context,
-        overtime: overtime ?? this.overtime,
-      );
+    workerId: workerId,
+    start: start ?? this.start,
+    end: end ?? this.end,
+    date: date,
+    context: context,
+    overtime: overtime ?? this.overtime,
+  );
 
   @override
-  String toString() => 'WorkPiece(${formatDate(date)} ${start.toIso8601String()}..${end.toIso8601String()} '
+  String toString() =>
+      'WorkPiece(${formatDate(date)} ${start.toIso8601String()}..${end.toIso8601String()} '
       '${context.jobRoleCode}${overtime ? ' OT' : ''})';
 }
 
@@ -124,8 +125,7 @@ class WorkerWork {
       pieces.where((p) => test(p.context)).fold(0, (s, p) => s + p.minutes);
 }
 
-int _shiftPreference(Shift s) =>
-    (s.status == ShiftStatus.assigned || s.status == ShiftStatus.released) ? 0 : 1;
+int _shiftPreference(Shift s) => (s.status == ShiftStatus.assigned || s.status == ShiftStatus.released) ? 0 : 1;
 
 /// Attributes one person's punches to their shifts and returns paid pieces.
 ///
@@ -166,13 +166,15 @@ WorkerWork attributeWork({
     final evId = shift?.eventId ?? eventId;
     final ev = evId == null ? null : events[evId];
     if (evId != null && ev == null && reportedUnknownEvents.add(evId)) {
-      problems.add(PayProblem(
-        kind: PayProblemKind.unknownEvent,
-        severity: PayProblemSeverity.blocking,
-        message: 'Event $evId was not loaded, so its event type (and any event-type rate) is unknown.',
-        workerId: workerId,
-        eventId: evId,
-      ));
+      problems.add(
+        PayProblem(
+          kind: PayProblemKind.unknownEvent,
+          severity: PayProblemSeverity.blocking,
+          message: 'Event $evId was not loaded, so its event type (and any event-type rate) is unknown.',
+          workerId: workerId,
+          eventId: evId,
+        ),
+      );
     }
     return WorkContext(
       eventId: evId,
@@ -208,46 +210,54 @@ WorkerWork attributeWork({
     final paid = intervals.fold(0, (s, i) => s + i.minutes);
     final hasAccepted = ps.any((p) => p.status != PunchStatus.voided);
     if (ctx.shiftId == null && ctx.eventId != null && hasAccepted) {
-      problems.add(PayProblem(
-        kind: PayProblemKind.noShiftForEvent,
-        severity: PayProblemSeverity.warning,
-        message: 'Punches at event ${ctx.eventId} with no shift; paid as ${ctx.jobRoleCode ?? 'no role'}.',
-        workerId: workerId,
-        eventId: ctx.eventId,
-      ));
+      problems.add(
+        PayProblem(
+          kind: PayProblemKind.noShiftForEvent,
+          severity: PayProblemSeverity.warning,
+          message: 'Punches at event ${ctx.eventId} with no shift; paid as ${ctx.jobRoleCode ?? 'no role'}.',
+          workerId: workerId,
+          eventId: ctx.eventId,
+        ),
+      );
     }
     if (ctx.jobRoleCode == null && hasAccepted) {
-      problems.add(PayProblem(
-        kind: PayProblemKind.noJobRole,
-        severity: PayProblemSeverity.warning,
-        message: 'Punches with no shift and no default job role.',
-        workerId: workerId,
-        eventId: ctx.eventId,
-      ));
+      problems.add(
+        PayProblem(
+          kind: PayProblemKind.noJobRole,
+          severity: PayProblemSeverity.warning,
+          message: 'Punches with no shift and no default job role.',
+          workerId: workerId,
+          eventId: ctx.eventId,
+        ),
+      );
     }
     for (final issue in tl.issues) {
       switch (issue.kind) {
         case TimelineIssueKind.duplicatePunch:
           break; // The same punch sent twice (offline sync); counted once, nothing to fix.
         case TimelineIssueKind.missingClockOut:
-          problems.add(PayProblem(
-            kind: PayProblemKind.openClockIn,
-            severity: PayProblemSeverity.blocking,
-            message: 'Clocked in with no clock-out. Time after the last closing punch is not paid until corrected.',
-            workerId: workerId,
-            eventId: ctx.eventId,
-            shiftId: ctx.shiftId,
-          ));
+          problems.add(
+            PayProblem(
+              kind: PayProblemKind.openClockIn,
+              severity: PayProblemSeverity.blocking,
+              message: 'Clocked in with no clock-out. Time after the last closing punch is not paid until corrected.',
+              workerId: workerId,
+              eventId: ctx.eventId,
+              shiftId: ctx.shiftId,
+            ),
+          );
         default:
-          problems.add(PayProblem(
-            kind: PayProblemKind.punchIgnored,
-            severity: PayProblemSeverity.warning,
-            message: 'Punch ignored: ${issue.kind.name}.',
-            workerId: workerId,
-            eventId: ctx.eventId,
-            shiftId: ctx.shiftId,
-            punchId: issue.punchId,
-          ));
+          problems.add(
+            PayProblem(
+              kind: PayProblemKind.punchIgnored,
+              severity: PayProblemSeverity.warning,
+              message: 'Punch ignored: ${issue.kind.name}.',
+              workerId: workerId,
+              eventId: ctx.eventId,
+              shiftId: ctx.shiftId,
+              punchId: issue.punchId,
+            ),
+          );
       }
     }
     final voided = {
@@ -257,15 +267,17 @@ WorkerWork attributeWork({
     final reviewed = <String>{};
     for (final p in ps) {
       if (p.status == PunchStatus.needsReview && !voided.contains(p.id) && reviewed.add(p.id)) {
-        problems.add(PayProblem(
-          kind: PayProblemKind.punchNeedsReview,
-          severity: PayProblemSeverity.blocking,
-          message: 'Punch needs review; counted as recorded.',
-          workerId: workerId,
-          eventId: ctx.eventId,
-          shiftId: ctx.shiftId,
-          punchId: p.id,
-        ));
+        problems.add(
+          PayProblem(
+            kind: PayProblemKind.punchNeedsReview,
+            severity: PayProblemSeverity.blocking,
+            message: 'Punch needs review; counted as recorded.',
+            workerId: workerId,
+            eventId: ctx.eventId,
+            shiftId: ctx.shiftId,
+            punchId: p.id,
+          ),
+        );
       }
     }
     final index = groups.length;
@@ -293,12 +305,14 @@ WorkerWork attributeWork({
     if (coveredUntil == null || iv.end.isAfter(coveredUntil)) coveredUntil = iv.end;
   }
   if (overlap > 0) {
-    problems.add(PayProblem(
-      kind: PayProblemKind.overlappingTime,
-      severity: PayProblemSeverity.blocking,
-      message: '$overlap minutes were clocked under two shifts at once; paid once, under the earlier shift.',
-      workerId: workerId,
-    ));
+    problems.add(
+      PayProblem(
+        kind: PayProblemKind.overlappingTime,
+        severity: PayProblemSeverity.blocking,
+        message: '$overlap minutes were clocked under two shifts at once; paid once, under the earlier shift.',
+        workerId: workerId,
+      ),
+    );
   }
 
   final pieces = <WorkPiece>[];
@@ -323,7 +337,12 @@ WorkerWork attributeWork({
 
 /// One workweek of pieces with overtime marked.
 class WorkweekPieces {
-  const WorkweekPieces({required this.weekStart, required this.firstDate, required this.overtime, required this.pieces});
+  const WorkweekPieces({
+    required this.weekStart,
+    required this.firstDate,
+    required this.overtime,
+    required this.pieces,
+  });
 
   /// UTC instant of local midnight starting the week.
   final DateTime weekStart;
@@ -351,8 +370,12 @@ List<WorkweekPieces> markOvertime(List<WorkPiece> pieces, {required String timeZ
   final out = <WorkweekPieces>[];
   for (final ws in starts) {
     final ps = [...byWeek[ws]!]..sort((a, b) => a.start.compareTo(b.start));
-    final ot = overtimeForWeek([for (final p in ps) WorkInterval(p.start, p.end)],
-        weekContaining: ws, timeZone: timeZone, rules: rules);
+    final ot = overtimeForWeek(
+      [for (final p in ps) WorkInterval(p.start, p.end)],
+      weekContaining: ws,
+      timeZone: timeZone,
+      rules: rules,
+    );
     final sum = ps.fold(0, (s, p) => s + p.minutes);
     if (sum != ot.totalMinutes) {
       throw StateError('Workweek minutes do not reconcile: pieces $sum, overtime ${ot.totalMinutes}');
@@ -380,12 +403,9 @@ List<WorkweekPieces> markOvertime(List<WorkPiece> pieces, {required String timeZ
     }
     if (ot.weeklyOvertimeMinutes > 0) markLast((_) => true, ot.weeklyOvertimeMinutes);
 
-    out.add(WorkweekPieces(
-      weekStart: ws,
-      firstDate: localDateOf(ws, timeZone),
-      overtime: ot,
-      pieces: List.unmodifiable(ps),
-    ));
+    out.add(
+      WorkweekPieces(weekStart: ws, firstDate: localDateOf(ws, timeZone), overtime: ot, pieces: List.unmodifiable(ps)),
+    );
   }
   return out;
 }

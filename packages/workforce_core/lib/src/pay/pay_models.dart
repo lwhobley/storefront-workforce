@@ -51,14 +51,14 @@ abstract final class PayCodes {
 
   /// Kind of a code when the venue's pay_codes list does not say.
   static PayCodeKind defaultKind(String code) => switch (code) {
-        regular => PayCodeKind.regular,
-        overtime => PayCodeKind.overtime,
-        tips => PayCodeKind.tips,
-        lead => PayCodeKind.differential,
-        bonus => PayCodeKind.bonus,
-        tipCreditMakeup => PayCodeKind.tipCreditMakeup,
-        _ => PayCodeKind.other,
-      };
+    regular => PayCodeKind.regular,
+    overtime => PayCodeKind.overtime,
+    tips => PayCodeKind.tips,
+    lead => PayCodeKind.differential,
+    bonus => PayCodeKind.bonus,
+    tipCreditMakeup => PayCodeKind.tipCreditMakeup,
+    _ => PayCodeKind.other,
+  };
 }
 
 class PayCode {
@@ -81,22 +81,22 @@ class PayCode {
   final int sort;
 
   factory PayCode.fromJson(Map<String, dynamic> j) => PayCode(
-        venueId: j['venue_id'] as String,
-        code: j['code'] as String,
-        name: j['name'] as String,
-        kind: PayCodeKind.fromCode(j['kind'] as String?),
-        paycomCode: (j['paycom_code'] as String?) ?? '',
-        sort: (j['sort'] as num?)?.toInt() ?? 0,
-      );
+    venueId: j['venue_id'] as String,
+    code: j['code'] as String,
+    name: j['name'] as String,
+    kind: PayCodeKind.fromCode(j['kind'] as String?),
+    paycomCode: (j['paycom_code'] as String?) ?? '',
+    sort: (j['sort'] as num?)?.toInt() ?? 0,
+  );
 
   Map<String, dynamic> toJson() => {
-        'venue_id': venueId,
-        'code': code,
-        'name': name,
-        'kind': kind.code,
-        'paycom_code': paycomCode,
-        'sort': sort,
-      };
+    'venue_id': venueId,
+    'code': code,
+    'name': name,
+    'kind': kind.code,
+    'paycom_code': paycomCode,
+    'sort': sort,
+  };
 }
 
 class PayRate {
@@ -131,32 +131,32 @@ class PayRate {
   bool isActiveOn(DateTime date) => isEffectiveOn(date, effectiveFrom, effectiveTo);
 
   factory PayRate.fromJson(Map<String, dynamic> j) => PayRate(
-        id: j['id'] as String,
-        venueId: j['venue_id'] as String,
-        workerId: j['worker_id'] as String?,
-        jobRoleCode: j['job_role_code'] as String?,
-        eventTypeCode: j['event_type_code'] as String?,
-        hourlyRateCents: parseCents(j['hourly_rate']),
-        effectiveFrom: _date(j['effective_from']),
-        effectiveTo: _dateOrNull(j['effective_to']),
-        note: (j['note'] as String?) ?? '',
-        createdBy: j['created_by'] as String?,
-        createdAt: _instant(j['created_at']),
-      );
+    id: j['id'] as String,
+    venueId: j['venue_id'] as String,
+    workerId: j['worker_id'] as String?,
+    jobRoleCode: j['job_role_code'] as String?,
+    eventTypeCode: j['event_type_code'] as String?,
+    hourlyRateCents: parseCents(j['hourly_rate']),
+    effectiveFrom: _date(j['effective_from']),
+    effectiveTo: _dateOrNull(j['effective_to']),
+    note: (j['note'] as String?) ?? '',
+    createdBy: j['created_by'] as String?,
+    createdAt: _instant(j['created_at']),
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'venue_id': venueId,
-        'worker_id': workerId,
-        'job_role_code': jobRoleCode,
-        'event_type_code': eventTypeCode,
-        'hourly_rate': centsToJson(hourlyRateCents),
-        'effective_from': _dateStr(effectiveFrom),
-        'effective_to': _dateStr(effectiveTo),
-        'note': note,
-        if (createdBy != null) 'created_by': createdBy,
-        if (createdAt != null) 'created_at': _iso(createdAt),
-      };
+    'id': id,
+    'venue_id': venueId,
+    'worker_id': workerId,
+    'job_role_code': jobRoleCode,
+    'event_type_code': eventTypeCode,
+    'hourly_rate': centsToJson(hourlyRateCents),
+    'effective_from': _dateStr(effectiveFrom),
+    'effective_to': _dateStr(effectiveTo),
+    'note': note,
+    if (createdBy != null) 'created_by': createdBy,
+    if (createdAt != null) 'created_at': _iso(createdAt),
+  };
 }
 
 /// Extra pay on top of the rate: per hour (lead pay) and/or per shift.
@@ -192,34 +192,34 @@ class PayDifferential {
   bool isActiveOn(DateTime date) => isEffectiveOn(date, effectiveFrom, effectiveTo);
 
   factory PayDifferential.fromJson(Map<String, dynamic> j) => PayDifferential(
-        id: j['id'] as String,
-        venueId: j['venue_id'] as String,
-        name: j['name'] as String,
-        payCode: j['pay_code'] as String,
-        jobRoleCode: j['job_role_code'] as String?,
-        workerId: j['worker_id'] as String?,
-        eventTypeCode: j['event_type_code'] as String?,
-        perHourCents: j['per_hour'] == null ? 0 : parseCents(j['per_hour']),
-        perShiftCents: j['per_shift'] == null ? 0 : parseCents(j['per_shift']),
-        effectiveFrom: _date(j['effective_from']),
-        effectiveTo: _dateOrNull(j['effective_to']),
-        createdAt: _instant(j['created_at']),
-      );
+    id: j['id'] as String,
+    venueId: j['venue_id'] as String,
+    name: j['name'] as String,
+    payCode: j['pay_code'] as String,
+    jobRoleCode: j['job_role_code'] as String?,
+    workerId: j['worker_id'] as String?,
+    eventTypeCode: j['event_type_code'] as String?,
+    perHourCents: j['per_hour'] == null ? 0 : parseCents(j['per_hour']),
+    perShiftCents: j['per_shift'] == null ? 0 : parseCents(j['per_shift']),
+    effectiveFrom: _date(j['effective_from']),
+    effectiveTo: _dateOrNull(j['effective_to']),
+    createdAt: _instant(j['created_at']),
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'venue_id': venueId,
-        'name': name,
-        'pay_code': payCode,
-        'job_role_code': jobRoleCode,
-        'worker_id': workerId,
-        'event_type_code': eventTypeCode,
-        'per_hour': centsToJson(perHourCents),
-        'per_shift': centsToJson(perShiftCents),
-        'effective_from': _dateStr(effectiveFrom),
-        'effective_to': _dateStr(effectiveTo),
-        if (createdAt != null) 'created_at': _iso(createdAt),
-      };
+    'id': id,
+    'venue_id': venueId,
+    'name': name,
+    'pay_code': payCode,
+    'job_role_code': jobRoleCode,
+    'worker_id': workerId,
+    'event_type_code': eventTypeCode,
+    'per_hour': centsToJson(perHourCents),
+    'per_shift': centsToJson(perShiftCents),
+    'effective_from': _dateStr(effectiveFrom),
+    'effective_to': _dateStr(effectiveTo),
+    if (createdAt != null) 'created_at': _iso(createdAt),
+  };
 }
 
 /// A manager's proposed punch change (add, void, or replace).
@@ -271,44 +271,44 @@ class TimeCorrection {
   final String? resultPunchId;
 
   factory TimeCorrection.fromJson(Map<String, dynamic> j) => TimeCorrection(
-        id: j['id'] as String,
-        venueId: j['venue_id'] as String,
-        workerId: j['worker_id'] as String,
-        eventId: j['event_id'] as String?,
-        action: j['action'] as String,
-        punchId: j['punch_id'] as String?,
-        newKind: j['new_kind'] as String?,
-        newBreakKind: j['new_break_kind'] as String?,
-        newOccurredAt: _instant(j['new_occurred_at']),
-        reason: j['reason'] as String,
-        status: (j['status'] as String?) ?? 'pending',
-        requestedBy: j['requested_by'] as String?,
-        requestedAt: _instant(j['requested_at']),
-        decidedBy: j['decided_by'] as String?,
-        decidedAt: _instant(j['decided_at']),
-        decisionNote: (j['decision_note'] as String?) ?? '',
-        resultPunchId: j['result_punch_id'] as String?,
-      );
+    id: j['id'] as String,
+    venueId: j['venue_id'] as String,
+    workerId: j['worker_id'] as String,
+    eventId: j['event_id'] as String?,
+    action: j['action'] as String,
+    punchId: j['punch_id'] as String?,
+    newKind: j['new_kind'] as String?,
+    newBreakKind: j['new_break_kind'] as String?,
+    newOccurredAt: _instant(j['new_occurred_at']),
+    reason: j['reason'] as String,
+    status: (j['status'] as String?) ?? 'pending',
+    requestedBy: j['requested_by'] as String?,
+    requestedAt: _instant(j['requested_at']),
+    decidedBy: j['decided_by'] as String?,
+    decidedAt: _instant(j['decided_at']),
+    decisionNote: (j['decision_note'] as String?) ?? '',
+    resultPunchId: j['result_punch_id'] as String?,
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'venue_id': venueId,
-        'worker_id': workerId,
-        'event_id': eventId,
-        'action': action,
-        'punch_id': punchId,
-        'new_kind': newKind,
-        'new_break_kind': newBreakKind,
-        'new_occurred_at': _iso(newOccurredAt),
-        'reason': reason,
-        'status': status,
-        if (requestedBy != null) 'requested_by': requestedBy,
-        if (requestedAt != null) 'requested_at': _iso(requestedAt),
-        'decided_by': decidedBy,
-        'decided_at': _iso(decidedAt),
-        'decision_note': decisionNote,
-        'result_punch_id': resultPunchId,
-      };
+    'id': id,
+    'venue_id': venueId,
+    'worker_id': workerId,
+    'event_id': eventId,
+    'action': action,
+    'punch_id': punchId,
+    'new_kind': newKind,
+    'new_break_kind': newBreakKind,
+    'new_occurred_at': _iso(newOccurredAt),
+    'reason': reason,
+    'status': status,
+    if (requestedBy != null) 'requested_by': requestedBy,
+    if (requestedAt != null) 'requested_at': _iso(requestedAt),
+    'decided_by': decidedBy,
+    'decided_at': _iso(decidedAt),
+    'decision_note': decisionNote,
+    'result_punch_id': resultPunchId,
+  };
 }
 
 class PayPeriod {
@@ -344,36 +344,39 @@ class PayPeriod {
   bool contains(DateTime date) => isEffectiveOn(date, startsOn, endsOn);
 
   /// Number of calendar days in the period.
-  int get days => DateTime.utc(endsOn.year, endsOn.month, endsOn.day)
-          .difference(DateTime.utc(startsOn.year, startsOn.month, startsOn.day))
-          .inDays +
+  int get days =>
+      DateTime.utc(
+        endsOn.year,
+        endsOn.month,
+        endsOn.day,
+      ).difference(DateTime.utc(startsOn.year, startsOn.month, startsOn.day)).inDays +
       1;
 
   factory PayPeriod.fromJson(Map<String, dynamic> j) => PayPeriod(
-        id: j['id'] as String?,
-        venueId: j['venue_id'] as String?,
-        startsOn: _date(j['starts_on']),
-        endsOn: _date(j['ends_on']),
-        payDate: _date(j['pay_date']),
-        status: (j['status'] as String?) ?? 'open',
-        approvedBy: j['approved_by'] as String?,
-        approvedAt: _instant(j['approved_at']),
-        rulesVersion: (j['rules_version'] as num?)?.toInt(),
-        createdAt: _instant(j['created_at']),
-      );
+    id: j['id'] as String?,
+    venueId: j['venue_id'] as String?,
+    startsOn: _date(j['starts_on']),
+    endsOn: _date(j['ends_on']),
+    payDate: _date(j['pay_date']),
+    status: (j['status'] as String?) ?? 'open',
+    approvedBy: j['approved_by'] as String?,
+    approvedAt: _instant(j['approved_at']),
+    rulesVersion: (j['rules_version'] as num?)?.toInt(),
+    createdAt: _instant(j['created_at']),
+  );
 
   Map<String, dynamic> toJson() => {
-        if (id != null) 'id': id,
-        if (venueId != null) 'venue_id': venueId,
-        'starts_on': _dateStr(startsOn),
-        'ends_on': _dateStr(endsOn),
-        'pay_date': _dateStr(payDate),
-        'status': status,
-        'approved_by': approvedBy,
-        'approved_at': _iso(approvedAt),
-        'rules_version': rulesVersion,
-        if (createdAt != null) 'created_at': _iso(createdAt),
-      };
+    if (id != null) 'id': id,
+    if (venueId != null) 'venue_id': venueId,
+    'starts_on': _dateStr(startsOn),
+    'ends_on': _dateStr(endsOn),
+    'pay_date': _dateStr(payDate),
+    'status': status,
+    'approved_by': approvedBy,
+    'approved_at': _iso(approvedAt),
+    'rules_version': rulesVersion,
+    if (createdAt != null) 'created_at': _iso(createdAt),
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -450,37 +453,38 @@ class PayLine {
       );
 
   factory PayLine.fromJson(Map<String, dynamic> j) => PayLine(
-        id: (j['id'] as num?)?.toInt(),
-        venueId: j['venue_id'] as String?,
-        payPeriodId: j['pay_period_id'] as String?,
-        workerId: j['worker_id'] as String,
-        workDate: _date(j['work_date']),
-        eventId: j['event_id'] as String?,
-        storefrontId: j['storefront_id'] as String?,
-        jobRoleCode: j['job_role_code'] as String?,
-        payCode: j['pay_code'] as String,
-        hoursHundredths: j['hours'] == null ? 0 : parseScaled(j['hours'], 2),
-        rateE4: parseScaledOrNull(j['rate'], 4),
-        amountCents: j['amount'] == null ? 0 : parseCents(j['amount']),
-      );
+    id: (j['id'] as num?)?.toInt(),
+    venueId: j['venue_id'] as String?,
+    payPeriodId: j['pay_period_id'] as String?,
+    workerId: j['worker_id'] as String,
+    workDate: _date(j['work_date']),
+    eventId: j['event_id'] as String?,
+    storefrontId: j['storefront_id'] as String?,
+    jobRoleCode: j['job_role_code'] as String?,
+    payCode: j['pay_code'] as String,
+    hoursHundredths: j['hours'] == null ? 0 : parseScaled(j['hours'], 2),
+    rateE4: parseScaledOrNull(j['rate'], 4),
+    amountCents: j['amount'] == null ? 0 : parseCents(j['amount']),
+  );
 
   Map<String, dynamic> toJson() => {
-        if (id != null) 'id': id,
-        if (venueId != null) 'venue_id': venueId,
-        if (payPeriodId != null) 'pay_period_id': payPeriodId,
-        'worker_id': workerId,
-        'work_date': _dateStr(workDate),
-        'event_id': eventId,
-        'storefront_id': storefrontId,
-        'job_role_code': jobRoleCode,
-        'pay_code': payCode,
-        'hours': hundredthsToJson(hoursHundredths),
-        'rate': rateE4 == null ? null : e4ToJson(rateE4!),
-        'amount': centsToJson(amountCents),
-      };
+    if (id != null) 'id': id,
+    if (venueId != null) 'venue_id': venueId,
+    if (payPeriodId != null) 'pay_period_id': payPeriodId,
+    'worker_id': workerId,
+    'work_date': _dateStr(workDate),
+    'event_id': eventId,
+    'storefront_id': storefrontId,
+    'job_role_code': jobRoleCode,
+    'pay_code': payCode,
+    'hours': hundredthsToJson(hoursHundredths),
+    'rate': rateE4 == null ? null : e4ToJson(rateE4!),
+    'amount': centsToJson(amountCents),
+  };
 
   @override
-  String toString() => 'PayLine($workerId ${_dateStr(workDate)} $payCode ${formatHundredths(hoursHundredths)}h '
+  String toString() =>
+      'PayLine($workerId ${_dateStr(workDate)} $payCode ${formatHundredths(hoursHundredths)}h '
       '@${rateE4 == null ? '-' : formatE4(rateE4!)} = ${formatCents(amountCents)})';
 }
 
@@ -525,36 +529,36 @@ class TipPool {
   final DateTime? createdAt;
 
   factory TipPool.fromJson(Map<String, dynamic> j) => TipPool(
-        id: j['id'] as String,
-        venueId: j['venue_id'] as String,
-        eventId: j['event_id'] as String,
-        storefrontId: j['storefront_id'] as String?,
-        amountCents: parseCents(j['amount']),
-        source: (j['source'] as String?) ?? 'manual',
-        method: (j['method'] as String?) ?? 'hours',
-        rolePointsThousandths: {
-          for (final e in ((j['role_points'] as Map?) ?? const {}).entries) e.key as String: parseScaled(e.value, 3),
-        },
-        status: (j['status'] as String?) ?? 'draft',
-        note: (j['note'] as String?) ?? '',
-        enteredBy: j['entered_by'] as String?,
-        createdAt: _instant(j['created_at']),
-      );
+    id: j['id'] as String,
+    venueId: j['venue_id'] as String,
+    eventId: j['event_id'] as String,
+    storefrontId: j['storefront_id'] as String?,
+    amountCents: parseCents(j['amount']),
+    source: (j['source'] as String?) ?? 'manual',
+    method: (j['method'] as String?) ?? 'hours',
+    rolePointsThousandths: {
+      for (final e in ((j['role_points'] as Map?) ?? const {}).entries) e.key as String: parseScaled(e.value, 3),
+    },
+    status: (j['status'] as String?) ?? 'draft',
+    note: (j['note'] as String?) ?? '',
+    enteredBy: j['entered_by'] as String?,
+    createdAt: _instant(j['created_at']),
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'venue_id': venueId,
-        'event_id': eventId,
-        'storefront_id': storefrontId,
-        'amount': centsToJson(amountCents),
-        'source': source,
-        'method': method,
-        'role_points': {for (final e in rolePointsThousandths.entries) e.key: thousandthsToJson(e.value)},
-        'status': status,
-        'note': note,
-        if (enteredBy != null) 'entered_by': enteredBy,
-        if (createdAt != null) 'created_at': _iso(createdAt),
-      };
+    'id': id,
+    'venue_id': venueId,
+    'event_id': eventId,
+    'storefront_id': storefrontId,
+    'amount': centsToJson(amountCents),
+    'source': source,
+    'method': method,
+    'role_points': {for (final e in rolePointsThousandths.entries) e.key: thousandthsToJson(e.value)},
+    'status': status,
+    'note': note,
+    if (enteredBy != null) 'entered_by': enteredBy,
+    if (createdAt != null) 'created_at': _iso(createdAt),
+  };
 }
 
 class TipAllocation {
@@ -577,22 +581,22 @@ class TipAllocation {
   final int amountCents;
 
   factory TipAllocation.fromJson(Map<String, dynamic> j) => TipAllocation(
-        poolId: j['pool_id'] as String,
-        venueId: j['venue_id'] as String,
-        workerId: j['worker_id'] as String,
-        hoursHundredths: j['hours'] == null ? 0 : parseScaled(j['hours'], 2),
-        pointsThousandths: j['points'] == null ? 0 : parseScaled(j['points'], 3),
-        amountCents: parseCents(j['amount']),
-      );
+    poolId: j['pool_id'] as String,
+    venueId: j['venue_id'] as String,
+    workerId: j['worker_id'] as String,
+    hoursHundredths: j['hours'] == null ? 0 : parseScaled(j['hours'], 2),
+    pointsThousandths: j['points'] == null ? 0 : parseScaled(j['points'], 3),
+    amountCents: parseCents(j['amount']),
+  );
 
   Map<String, dynamic> toJson() => {
-        'pool_id': poolId,
-        'venue_id': venueId,
-        'worker_id': workerId,
-        'hours': hundredthsToJson(hoursHundredths),
-        'points': thousandthsToJson(pointsThousandths),
-        'amount': centsToJson(amountCents),
-      };
+    'pool_id': poolId,
+    'venue_id': venueId,
+    'worker_id': workerId,
+    'hours': hundredthsToJson(hoursHundredths),
+    'points': thousandthsToJson(pointsThousandths),
+    'amount': centsToJson(amountCents),
+  };
 }
 
 class AgencyBillRate {
@@ -621,26 +625,26 @@ class AgencyBillRate {
   bool isActiveOn(DateTime date) => isEffectiveOn(date, effectiveFrom, effectiveTo);
 
   factory AgencyBillRate.fromJson(Map<String, dynamic> j) => AgencyBillRate(
-        id: j['id'] as String,
-        venueId: j['venue_id'] as String,
-        agencyId: j['agency_id'] as String,
-        jobRoleCode: j['job_role_code'] as String,
-        billRateCents: parseCents(j['bill_rate']),
-        overtimeBillRateCents: parseScaledOrNull(j['overtime_bill_rate'], 2),
-        effectiveFrom: _date(j['effective_from']),
-        effectiveTo: _dateOrNull(j['effective_to']),
-      );
+    id: j['id'] as String,
+    venueId: j['venue_id'] as String,
+    agencyId: j['agency_id'] as String,
+    jobRoleCode: j['job_role_code'] as String,
+    billRateCents: parseCents(j['bill_rate']),
+    overtimeBillRateCents: parseScaledOrNull(j['overtime_bill_rate'], 2),
+    effectiveFrom: _date(j['effective_from']),
+    effectiveTo: _dateOrNull(j['effective_to']),
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'venue_id': venueId,
-        'agency_id': agencyId,
-        'job_role_code': jobRoleCode,
-        'bill_rate': centsToJson(billRateCents),
-        'overtime_bill_rate': overtimeBillRateCents == null ? null : centsToJson(overtimeBillRateCents!),
-        'effective_from': _dateStr(effectiveFrom),
-        'effective_to': _dateStr(effectiveTo),
-      };
+    'id': id,
+    'venue_id': venueId,
+    'agency_id': agencyId,
+    'job_role_code': jobRoleCode,
+    'bill_rate': centsToJson(billRateCents),
+    'overtime_bill_rate': overtimeBillRateCents == null ? null : centsToJson(overtimeBillRateCents!),
+    'effective_from': _dateStr(effectiveFrom),
+    'effective_to': _dateStr(effectiveTo),
+  };
 }
 
 class NpoAgreement {
@@ -671,28 +675,28 @@ class NpoAgreement {
   bool isActiveOn(DateTime date) => isEffectiveOn(date, effectiveFrom, effectiveTo);
 
   factory NpoAgreement.fromJson(Map<String, dynamic> j) => NpoAgreement(
-        id: j['id'] as String,
-        venueId: j['venue_id'] as String,
-        npoGroupId: j['npo_group_id'] as String?,
-        hourlyRateCents: parseCents(j['hourly_rate']),
-        minHeadcount: (j['min_headcount'] as num?)?.toInt() ?? 0,
-        shortfallDeductionCents: j['shortfall_deduction'] == null ? 0 : parseCents(j['shortfall_deduction']),
-        noShowDeductionCents: j['no_show_deduction'] == null ? 0 : parseCents(j['no_show_deduction']),
-        effectiveFrom: _date(j['effective_from']),
-        effectiveTo: _dateOrNull(j['effective_to']),
-      );
+    id: j['id'] as String,
+    venueId: j['venue_id'] as String,
+    npoGroupId: j['npo_group_id'] as String?,
+    hourlyRateCents: parseCents(j['hourly_rate']),
+    minHeadcount: (j['min_headcount'] as num?)?.toInt() ?? 0,
+    shortfallDeductionCents: j['shortfall_deduction'] == null ? 0 : parseCents(j['shortfall_deduction']),
+    noShowDeductionCents: j['no_show_deduction'] == null ? 0 : parseCents(j['no_show_deduction']),
+    effectiveFrom: _date(j['effective_from']),
+    effectiveTo: _dateOrNull(j['effective_to']),
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'venue_id': venueId,
-        'npo_group_id': npoGroupId,
-        'hourly_rate': centsToJson(hourlyRateCents),
-        'min_headcount': minHeadcount,
-        'shortfall_deduction': centsToJson(shortfallDeductionCents),
-        'no_show_deduction': centsToJson(noShowDeductionCents),
-        'effective_from': _dateStr(effectiveFrom),
-        'effective_to': _dateStr(effectiveTo),
-      };
+    'id': id,
+    'venue_id': venueId,
+    'npo_group_id': npoGroupId,
+    'hourly_rate': centsToJson(hourlyRateCents),
+    'min_headcount': minHeadcount,
+    'shortfall_deduction': centsToJson(shortfallDeductionCents),
+    'no_show_deduction': centsToJson(noShowDeductionCents),
+    'effective_from': _dateStr(effectiveFrom),
+    'effective_to': _dateStr(effectiveTo),
+  };
 }
 
 /// One member's line in [NpoPayout.detail].
@@ -709,22 +713,22 @@ class NpoPayoutMember {
   int get hoursHundredths => minutesToHundredths(minutes);
 
   factory NpoPayoutMember.fromJson(Map<String, dynamic> j) => NpoPayoutMember(
-        workerId: j['worker_id'] as String,
-        name: (j['name'] as String?) ?? '',
-        // Stored detail has 2-decimal hours only; minutes are recovered to the nearest minute.
-        minutes: j['minutes'] != null
-            ? (j['minutes'] as num).toInt()
-            : divRoundHalfUp(parseScaled(j['hours'] ?? 0, 2) * 60, 100),
-        status: (j['status'] as String?) ?? 'worked',
-      );
+    workerId: j['worker_id'] as String,
+    name: (j['name'] as String?) ?? '',
+    // Stored detail has 2-decimal hours only; minutes are recovered to the nearest minute.
+    minutes: j['minutes'] != null
+        ? (j['minutes'] as num).toInt()
+        : divRoundHalfUp(parseScaled(j['hours'] ?? 0, 2) * 60, 100),
+    status: (j['status'] as String?) ?? 'worked',
+  );
 
   Map<String, dynamic> toJson() => {
-        'worker_id': workerId,
-        'name': name,
-        'hours': hundredthsToJson(hoursHundredths),
-        'minutes': minutes,
-        'status': status,
-      };
+    'worker_id': workerId,
+    'name': name,
+    'hours': hundredthsToJson(hoursHundredths),
+    'minutes': minutes,
+    'status': status,
+  };
 }
 
 class NpoPayout {
@@ -781,51 +785,50 @@ class NpoPayout {
   final int? minutes;
 
   factory NpoPayout.fromJson(Map<String, dynamic> j) => NpoPayout(
-        id: j['id'] as String?,
-        venueId: j['venue_id'] as String?,
-        eventId: j['event_id'] as String,
-        npoGroupId: j['npo_group_id'] as String,
-        membersScheduled: (j['members_scheduled'] as num?)?.toInt() ?? 0,
-        membersWorked: (j['members_worked'] as num?)?.toInt() ?? 0,
-        noShows: (j['no_shows'] as num?)?.toInt() ?? 0,
-        hoursHundredths: j['hours'] == null ? 0 : parseScaled(j['hours'], 2),
-        hourlyRateCents: j['hourly_rate'] == null ? 0 : parseCents(j['hourly_rate']),
-        grossCents: j['gross'] == null ? 0 : parseCents(j['gross']),
-        deductionsCents: j['deductions'] == null ? 0 : parseCents(j['deductions']),
-        adjustmentCents: j['adjustment'] == null ? 0 : parseCents(j['adjustment']),
-        adjustmentReason: (j['adjustment_reason'] as String?) ?? '',
-        totalCents: j['total'] == null ? 0 : parseCents(j['total']),
-        status: (j['status'] as String?) ?? 'pending',
-        approvedBy: j['approved_by'] as String?,
-        approvedAt: _instant(j['approved_at']),
-        paidAt: _instant(j['paid_at']),
-        paymentReference: (j['payment_reference'] as String?) ?? '',
-        detail: [
-          for (final m in (j['detail'] as List?) ?? const [])
-            NpoPayoutMember.fromJson((m as Map).cast<String, dynamic>()),
-        ],
-      );
+    id: j['id'] as String?,
+    venueId: j['venue_id'] as String?,
+    eventId: j['event_id'] as String,
+    npoGroupId: j['npo_group_id'] as String,
+    membersScheduled: (j['members_scheduled'] as num?)?.toInt() ?? 0,
+    membersWorked: (j['members_worked'] as num?)?.toInt() ?? 0,
+    noShows: (j['no_shows'] as num?)?.toInt() ?? 0,
+    hoursHundredths: j['hours'] == null ? 0 : parseScaled(j['hours'], 2),
+    hourlyRateCents: j['hourly_rate'] == null ? 0 : parseCents(j['hourly_rate']),
+    grossCents: j['gross'] == null ? 0 : parseCents(j['gross']),
+    deductionsCents: j['deductions'] == null ? 0 : parseCents(j['deductions']),
+    adjustmentCents: j['adjustment'] == null ? 0 : parseCents(j['adjustment']),
+    adjustmentReason: (j['adjustment_reason'] as String?) ?? '',
+    totalCents: j['total'] == null ? 0 : parseCents(j['total']),
+    status: (j['status'] as String?) ?? 'pending',
+    approvedBy: j['approved_by'] as String?,
+    approvedAt: _instant(j['approved_at']),
+    paidAt: _instant(j['paid_at']),
+    paymentReference: (j['payment_reference'] as String?) ?? '',
+    detail: [
+      for (final m in (j['detail'] as List?) ?? const []) NpoPayoutMember.fromJson((m as Map).cast<String, dynamic>()),
+    ],
+  );
 
   Map<String, dynamic> toJson() => {
-        if (id != null) 'id': id,
-        if (venueId != null) 'venue_id': venueId,
-        'event_id': eventId,
-        'npo_group_id': npoGroupId,
-        'members_scheduled': membersScheduled,
-        'members_worked': membersWorked,
-        'no_shows': noShows,
-        'hours': hundredthsToJson(hoursHundredths),
-        'hourly_rate': centsToJson(hourlyRateCents),
-        'gross': centsToJson(grossCents),
-        'deductions': centsToJson(deductionsCents),
-        'adjustment': centsToJson(adjustmentCents),
-        'adjustment_reason': adjustmentReason,
-        'total': centsToJson(totalCents),
-        'status': status,
-        'approved_by': approvedBy,
-        'approved_at': _iso(approvedAt),
-        'paid_at': _iso(paidAt),
-        'payment_reference': paymentReference,
-        'detail': [for (final m in detail) m.toJson()],
-      };
+    if (id != null) 'id': id,
+    if (venueId != null) 'venue_id': venueId,
+    'event_id': eventId,
+    'npo_group_id': npoGroupId,
+    'members_scheduled': membersScheduled,
+    'members_worked': membersWorked,
+    'no_shows': noShows,
+    'hours': hundredthsToJson(hoursHundredths),
+    'hourly_rate': centsToJson(hourlyRateCents),
+    'gross': centsToJson(grossCents),
+    'deductions': centsToJson(deductionsCents),
+    'adjustment': centsToJson(adjustmentCents),
+    'adjustment_reason': adjustmentReason,
+    'total': centsToJson(totalCents),
+    'status': status,
+    'approved_by': approvedBy,
+    'approved_at': _iso(approvedAt),
+    'paid_at': _iso(paidAt),
+    'payment_reference': paymentReference,
+    'detail': [for (final m in detail) m.toJson()],
+  };
 }

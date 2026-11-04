@@ -115,16 +115,18 @@ void main() {
 
     test('fromVenueSettings reads payday lag from pay, else pay_period (as ensure_pay_periods does)', () {
       expect(
-          PayRules.fromVenueSettings({
-            'pay_period': {'frequency': 'biweekly', 'payday_days_after_end': 4},
-          }).paydayDaysAfterEnd,
-          4);
+        PayRules.fromVenueSettings({
+          'pay_period': {'frequency': 'biweekly', 'payday_days_after_end': 4},
+        }).paydayDaysAfterEnd,
+        4,
+      );
       expect(
-          PayRules.fromVenueSettings({
-            'pay': {'payday_days_after_end': 3},
-            'pay_period': {'payday_days_after_end': 4},
-          }).paydayDaysAfterEnd,
-          3);
+        PayRules.fromVenueSettings({
+          'pay': {'payday_days_after_end': 3},
+          'pay_period': {'payday_days_after_end': 4},
+        }).paydayDaysAfterEnd,
+        3,
+      );
       expect(PayRules.fromVenueSettings({}).paydayDaysAfterEnd, 5);
     });
 
@@ -173,53 +175,116 @@ void main() {
     });
 
     test('every pay table', () {
-      expect(keys(PayCode(venueId: 'v', code: 'REG', name: 'Regular', kind: PayCodeKind.regular).toJson()),
-          {'venue_id', 'code', 'name', 'kind', 'paycom_code', 'sort'});
+      expect(keys(PayCode(venueId: 'v', code: 'REG', name: 'Regular', kind: PayCodeKind.regular).toJson()), {
+        'venue_id',
+        'code',
+        'name',
+        'kind',
+        'paycom_code',
+        'sort',
+      });
       expect(keys(rate('r', 1500, role: 'cashier').toJson()), {
         'id', 'venue_id', 'worker_id', 'job_role_code', 'event_type_code', 'hourly_rate', 'effective_from', //
         'effective_to', 'note',
       });
       expect(
-          keys(PayDifferential(
-                  id: 'd', venueId: 'v', name: 'Lead', payCode: 'LEAD', effectiveFrom: day(2026, 1, 1), perHourCents: 200)
-              .toJson()),
-          {
-            'id', 'venue_id', 'name', 'pay_code', 'job_role_code', 'worker_id', 'event_type_code', 'per_hour', //
-            'per_shift', 'effective_from', 'effective_to',
-          });
-      expect(keys(PayPeriod(id: 'p', venueId: 'v', startsOn: day(2026, 11, 9), endsOn: day(2026, 11, 22), payDate: day(2026, 11, 27)).toJson()), {
-        'id', 'venue_id', 'starts_on', 'ends_on', 'pay_date', 'status', 'approved_by', 'approved_at', 'rules_version',
+        keys(
+          PayDifferential(
+            id: 'd',
+            venueId: 'v',
+            name: 'Lead',
+            payCode: 'LEAD',
+            effectiveFrom: day(2026, 1, 1),
+            perHourCents: 200,
+          ).toJson(),
+        ),
+        {
+          'id', 'venue_id', 'name', 'pay_code', 'job_role_code', 'worker_id', 'event_type_code', 'per_hour', //
+          'per_shift', 'effective_from', 'effective_to',
+        },
+      );
+      expect(
+        keys(
+          PayPeriod(
+            id: 'p',
+            venueId: 'v',
+            startsOn: day(2026, 11, 9),
+            endsOn: day(2026, 11, 22),
+            payDate: day(2026, 11, 27),
+          ).toJson(),
+        ),
+        {'id', 'venue_id', 'starts_on', 'ends_on', 'pay_date', 'status', 'approved_by', 'approved_at', 'rules_version'},
+      );
+      expect(
+        keys(
+          TipPool(
+            id: 't',
+            venueId: 'v',
+            eventId: 'e',
+            amountCents: 100,
+            rolePointsThousandths: const {'bartender': 1000},
+          ).toJson(),
+        ),
+        {'id', 'venue_id', 'event_id', 'storefront_id', 'amount', 'source', 'method', 'role_points', 'status', 'note'},
+      );
+      expect(keys(const TipAllocation(poolId: 't', venueId: 'v', workerId: 'w', amountCents: 1).toJson()), {
+        'pool_id',
+        'venue_id',
+        'worker_id',
+        'hours',
+        'points',
+        'amount',
       });
       expect(
-          keys(TipPool(id: 't', venueId: 'v', eventId: 'e', amountCents: 100, rolePointsThousandths: const {'bartender': 1000})
-              .toJson()),
-          {'id', 'venue_id', 'event_id', 'storefront_id', 'amount', 'source', 'method', 'role_points', 'status', 'note'});
-      expect(keys(const TipAllocation(poolId: 't', venueId: 'v', workerId: 'w', amountCents: 1).toJson()),
-          {'pool_id', 'venue_id', 'worker_id', 'hours', 'points', 'amount'});
+        keys(
+          AgencyBillRate(
+            id: 'b',
+            venueId: 'v',
+            agencyId: 'a',
+            jobRoleCode: 'cashier',
+            billRateCents: 2000,
+            effectiveFrom: day(2026, 1, 1),
+          ).toJson(),
+        ),
+        {
+          'id', 'venue_id', 'agency_id', 'job_role_code', 'bill_rate', 'overtime_bill_rate', 'effective_from', //
+          'effective_to',
+        },
+      );
       expect(
-          keys(AgencyBillRate(
-                  id: 'b', venueId: 'v', agencyId: 'a', jobRoleCode: 'cashier', billRateCents: 2000, effectiveFrom: day(2026, 1, 1))
-              .toJson()),
-          {
-            'id', 'venue_id', 'agency_id', 'job_role_code', 'bill_rate', 'overtime_bill_rate', 'effective_from', //
-            'effective_to',
-          });
-      expect(keys(NpoAgreement(id: 'a', venueId: 'v', hourlyRateCents: 1000, effectiveFrom: day(2026, 1, 1)).toJson()), {
-        'id', 'venue_id', 'npo_group_id', 'hourly_rate', 'min_headcount', 'shortfall_deduction', 'no_show_deduction', //
-        'effective_from', 'effective_to',
-      });
+        keys(NpoAgreement(id: 'a', venueId: 'v', hourlyRateCents: 1000, effectiveFrom: day(2026, 1, 1)).toJson()),
+        {
+          'id',
+          'venue_id',
+          'npo_group_id',
+          'hourly_rate',
+          'min_headcount',
+          'shortfall_deduction',
+          'no_show_deduction', //
+          'effective_from', 'effective_to',
+        },
+      );
       expect(keys(const NpoPayout(eventId: 'e', npoGroupId: 'g').toJson()), {
         'event_id', 'npo_group_id', 'members_scheduled', 'members_worked', 'no_shows', 'hours', 'hourly_rate', //
         'gross', 'deductions', 'adjustment', 'adjustment_reason', 'total', 'status', 'approved_by', 'approved_at', //
         'paid_at', 'payment_reference', 'detail',
       });
       expect(
-          keys(const TimeCorrection(id: 'c', venueId: 'v', workerId: 'w', action: 'void', punchId: 'p', reason: 'dup')
-              .toJson()),
-          {
-            'id', 'venue_id', 'worker_id', 'event_id', 'action', 'punch_id', 'new_kind', 'new_break_kind', //
-            'new_occurred_at', 'reason', 'status', 'decided_by', 'decided_at', 'decision_note', 'result_punch_id',
-          });
+        keys(
+          const TimeCorrection(
+            id: 'c',
+            venueId: 'v',
+            workerId: 'w',
+            action: 'void',
+            punchId: 'p',
+            reason: 'dup',
+          ).toJson(),
+        ),
+        {
+          'id', 'venue_id', 'worker_id', 'event_id', 'action', 'punch_id', 'new_kind', 'new_break_kind', //
+          'new_occurred_at', 'reason', 'status', 'decided_by', 'decided_at', 'decision_note', 'result_punch_id',
+        },
+      );
     });
 
     test('round trips', () {

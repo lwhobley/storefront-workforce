@@ -17,31 +17,30 @@ Worker worker(
   String? agencyId,
   String? npoGroupId,
   List<String> roles = const ['cashier'],
-}) =>
-    Worker(
-      id: id,
-      venueId: 'v1',
-      type: type,
-      employeeNumber: id,
-      firstName: first,
-      lastName: last ?? 'Worker-$id',
-      paycomEmployeeCode: code,
-      agencyId: agencyId,
-      npoGroupId: npoGroupId,
-      jobRoles: roles,
-    );
+}) => Worker(
+  id: id,
+  venueId: 'v1',
+  type: type,
+  employeeNumber: id,
+  firstName: first,
+  lastName: last ?? 'Worker-$id',
+  paycomEmployeeCode: code,
+  agencyId: agencyId,
+  npoGroupId: npoGroupId,
+  jobRoles: roles,
+);
 
 Event event(String id, DateTime start, {String type = 'game', int expected = 0, int? actual}) => Event(
-      id: id,
-      venueId: 'v1',
-      name: 'Event $id',
-      eventTypeCode: type,
-      startTime: start,
-      callTime: start.subtract(const Duration(hours: 3)),
-      doorsTime: start.subtract(const Duration(hours: 1)),
-      expectedAttendance: expected,
-      actualAttendance: actual,
-    );
+  id: id,
+  venueId: 'v1',
+  name: 'Event $id',
+  eventTypeCode: type,
+  startTime: start,
+  callTime: start.subtract(const Duration(hours: 3)),
+  doorsTime: start.subtract(const Duration(hours: 1)),
+  expectedAttendance: expected,
+  actualAttendance: actual,
+);
 
 Shift shift(
   String id, {
@@ -51,17 +50,16 @@ Shift shift(
   String storefrontId = 'sf1',
   String role = 'cashier',
   ShiftStatus status = ShiftStatus.assigned,
-}) =>
-    Shift(
-      id: id,
-      venueId: 'v1',
-      eventId: eventId,
-      storefrontId: storefrontId,
-      jobRoleCode: role,
-      workerId: workerId,
-      callTime: call,
-      status: status,
-    );
+}) => Shift(
+  id: id,
+  venueId: 'v1',
+  eventId: eventId,
+  storefrontId: storefrontId,
+  jobRoleCode: role,
+  workerId: workerId,
+  callTime: call,
+  status: status,
+);
 
 var _seq = 0;
 
@@ -74,18 +72,17 @@ Punch punch(
   BreakKind? breakKind,
   PunchStatus status = PunchStatus.accepted,
   String? id,
-}) =>
-    Punch(
-      id: id ?? 'p${_seq++}',
-      venueId: 'v1',
-      workerId: workerId,
-      eventId: eventId,
-      shiftId: shiftId,
-      kind: kind,
-      breakKind: breakKind,
-      occurredAt: at,
-      status: status,
-    );
+}) => Punch(
+  id: id ?? 'p${_seq++}',
+  venueId: 'v1',
+  workerId: workerId,
+  eventId: eventId,
+  shiftId: shiftId,
+  kind: kind,
+  breakKind: breakKind,
+  occurredAt: at,
+  status: status,
+);
 
 /// Clock in, optional breaks (start, end, kind), clock out.
 List<Punch> worked(
@@ -95,15 +92,14 @@ List<Punch> worked(
   String? eventId,
   String? shiftId,
   List<(DateTime, DateTime, BreakKind)> breaks = const [],
-}) =>
-    [
-      punch(workerId, PunchKind.clockIn, inAt, eventId: eventId, shiftId: shiftId),
-      for (final b in breaks) ...[
-        punch(workerId, PunchKind.breakStart, b.$1, eventId: eventId, shiftId: shiftId, breakKind: b.$3),
-        punch(workerId, PunchKind.breakEnd, b.$2, eventId: eventId, shiftId: shiftId),
-      ],
-      punch(workerId, PunchKind.clockOut, outAt, eventId: eventId, shiftId: shiftId),
-    ];
+}) => [
+  punch(workerId, PunchKind.clockIn, inAt, eventId: eventId, shiftId: shiftId),
+  for (final b in breaks) ...[
+    punch(workerId, PunchKind.breakStart, b.$1, eventId: eventId, shiftId: shiftId, breakKind: b.$3),
+    punch(workerId, PunchKind.breakEnd, b.$2, eventId: eventId, shiftId: shiftId),
+  ],
+  punch(workerId, PunchKind.clockOut, outAt, eventId: eventId, shiftId: shiftId),
+];
 
 PayRate rate(
   String id,
@@ -114,18 +110,17 @@ PayRate rate(
   DateTime? from,
   DateTime? to,
   DateTime? createdAt,
-}) =>
-    PayRate(
-      id: id,
-      venueId: 'v1',
-      workerId: workerId,
-      jobRoleCode: role,
-      eventTypeCode: eventType,
-      hourlyRateCents: cents,
-      effectiveFrom: from ?? day(2026, 1, 1),
-      effectiveTo: to,
-      createdAt: createdAt,
-    );
+}) => PayRate(
+  id: id,
+  venueId: 'v1',
+  workerId: workerId,
+  jobRoleCode: role,
+  eventTypeCode: eventType,
+  hourlyRateCents: cents,
+  effectiveFrom: from ?? day(2026, 1, 1),
+  effectiveTo: to,
+  createdAt: createdAt,
+);
 
 /// Venue rules with the Texas defaults (40h weekly, Monday workweek, biweekly from
 /// Monday 2026-01-05, rest breaks paid and meals unpaid).
@@ -137,6 +132,6 @@ final novPeriod = PayPeriod(startsOn: day(2026, 11, 9), endsOn: day(2026, 11, 22
 int sumCents(Iterable<PayLine> lines) => lines.fold(0, (s, l) => s + l.amountCents);
 
 List<PayLine> linesOf(Iterable<PayLine> lines, String code) => [
-      for (final l in lines)
-        if (l.payCode == code) l,
-    ];
+  for (final l in lines)
+    if (l.payCode == code) l,
+];

@@ -187,8 +187,7 @@ LaborCostReport calculateLaborCost({
     ...temp.keys,
     ...npo.keys,
     ...storefrontBudgetsCents.keys,
-  }.toList()
-    ..sort(_compareStorefront);
+  }.toList()..sort(_compareStorefront);
   final rows = [
     for (final id in ids)
       LaborCostRow(

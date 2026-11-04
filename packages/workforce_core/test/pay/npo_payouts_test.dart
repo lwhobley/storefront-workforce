@@ -9,23 +9,25 @@ void main() {
 
   // Venue default: $10/h, 5 people, $25 per missing person, $40 per no-show.
   final defaultAgreement = NpoAgreement(
-      id: 'default',
-      venueId: 'v1',
-      hourlyRateCents: 1000,
-      minHeadcount: 5,
-      shortfallDeductionCents: 2500,
-      noShowDeductionCents: 4000,
-      effectiveFrom: day(2026, 1, 1));
+    id: 'default',
+    venueId: 'v1',
+    hourlyRateCents: 1000,
+    minHeadcount: 5,
+    shortfallDeductionCents: 2500,
+    noShowDeductionCents: 4000,
+    effectiveFrom: day(2026, 1, 1),
+  );
   // Group g1's own: $12/h, 4 people, $30 short, $20 no-show.
   final g1Agreement = NpoAgreement(
-      id: 'g1',
-      venueId: 'v1',
-      npoGroupId: 'g1',
-      hourlyRateCents: 1200,
-      minHeadcount: 4,
-      shortfallDeductionCents: 3000,
-      noShowDeductionCents: 2000,
-      effectiveFrom: day(2026, 1, 1));
+    id: 'g1',
+    venueId: 'v1',
+    npoGroupId: 'g1',
+    hourlyRateCents: 1200,
+    minHeadcount: 4,
+    shortfallDeductionCents: 3000,
+    noShowDeductionCents: 2000,
+    effectiveFrom: day(2026, 1, 1),
+  );
   final agreements = [defaultAgreement, g1Agreement];
 
   Worker member(String id, String group) =>
@@ -33,7 +35,11 @@ void main() {
 
   group('deduction rule (no double penalty)', () {
     int d(int shortfall, int noShows, {int sd = 3000, int nd = 2000}) => npoDeductionsCents(
-        shortfall: shortfall, noShows: noShows, shortfallDeductionCents: sd, noShowDeductionCents: nd);
+      shortfall: shortfall,
+      noShows: noShows,
+      shortfallDeductionCents: sd,
+      noShowDeductionCents: nd,
+    );
 
     test('a no-show that also causes the shortfall is charged once, at the larger amount', () {
       expect(d(1, 1), 3000); // not 3000 + 2000
@@ -59,13 +65,19 @@ void main() {
     final members = [for (final id in ids) member(id, 'g2')];
     final shifts = [
       for (final id in ids)
-        shift('s-$id', workerId: id, eventId: 'e1', call: call,
-            status: id == 'm7' ? ShiftStatus.released : ShiftStatus.assigned),
+        shift(
+          's-$id',
+          workerId: id,
+          eventId: 'e1',
+          call: call,
+          status: id == 'm7' ? ShiftStatus.released : ShiftStatus.assigned,
+        ),
       // Someone from another group at the same event is ignored.
       shift('s-x', workerId: 'x1', eventId: 'e1', call: call),
     ];
     final punches = {
-      for (final id in ['m1', 'm2', 'm3', 'm4']) id: worked(id, ct(2026, 11, 10, 16), ct(2026, 11, 10, 21), eventId: 'e1'),
+      for (final id in ['m1', 'm2', 'm3', 'm4'])
+        id: worked(id, ct(2026, 11, 10, 16), ct(2026, 11, 10, 21), eventId: 'e1'),
     };
     final r = calculateNpoPayout(
       event: ev,
@@ -89,15 +101,24 @@ void main() {
     expect(p.grossCents, 20000);
     expect(p.deductionsCents, 8000);
     expect(p.totalCents, 13500);
-    expect({for (final m in p.detail) m.workerId: m.status}, {
-      'm1': 'worked', 'm2': 'worked', 'm3': 'worked', 'm4': 'worked', //
-      'm5': 'no_show', 'm6': 'no_show', 'm7': 'released',
-    });
+    expect(
+      {for (final m in p.detail) m.workerId: m.status},
+      {
+        'm1': 'worked', 'm2': 'worked', 'm3': 'worked', 'm4': 'worked', //
+        'm5': 'no_show', 'm6': 'no_show', 'm7': 'released',
+      },
+    );
     final json = p.toJson();
     expect(json['total'], 135.0);
     expect(json['deductions'], 80.0);
     expect(json['adjustment_reason'], 'Stayed late for clean-up');
-    expect((json['detail'] as List).first, {'worker_id': 'm1', 'name': 'M M1', 'hours': 5.0, 'minutes': 300, 'status': 'worked'});
+    expect((json['detail'] as List).first, {
+      'worker_id': 'm1',
+      'name': 'M M1',
+      'hours': 5.0,
+      'minutes': 300,
+      'status': 'worked',
+    });
   });
 
   test('group-specific agreement; hours from exact minutes; break rules apply', () {
@@ -111,8 +132,13 @@ void main() {
       shifts: [for (final id in ids) shift('s-$id', workerId: id, eventId: 'e1', call: call)],
       punchesByWorker: {
         for (final id in ids)
-          id: worked(id, ct(2026, 11, 10, 16), ct(2026, 11, 10, 21),
-              eventId: 'e1', breaks: [(ct(2026, 11, 10, 18), ct(2026, 11, 10, 18, 30), BreakKind.meal)]),
+          id: worked(
+            id,
+            ct(2026, 11, 10, 16),
+            ct(2026, 11, 10, 21),
+            eventId: 'e1',
+            breaks: [(ct(2026, 11, 10, 18), ct(2026, 11, 10, 18, 30), BreakKind.meal)],
+          ),
       },
       agreements: agreements,
       timeZone: tz,
@@ -149,14 +175,15 @@ void main() {
   test('adjustment needs a reason', () {
     expect(
       () => calculateNpoPayout(
-          event: ev,
-          npoGroupId: 'g2',
-          members: const [],
-          shifts: const [],
-          punchesByWorker: const {},
-          agreements: agreements,
-          timeZone: tz,
-          adjustmentCents: 100),
+        event: ev,
+        npoGroupId: 'g2',
+        members: const [],
+        shifts: const [],
+        punchesByWorker: const {},
+        agreements: agreements,
+        timeZone: tz,
+        adjustmentCents: 100,
+      ),
       throwsArgumentError,
     );
   });
@@ -181,10 +208,25 @@ void main() {
 
   test('season statement adds up payouts with a status breakdown', () {
     final payouts = [
-      const NpoPayout(eventId: 'e1', npoGroupId: 'g1', hoursHundredths: 2000, grossCents: 20000, deductionsCents: 8000,
-          adjustmentCents: 1500, totalCents: 13500, status: 'paid'),
-      const NpoPayout(eventId: 'e2', npoGroupId: 'g1', hoursHundredths: 1350, grossCents: 16200, deductionsCents: 3000,
-          totalCents: 13200, status: 'approved'),
+      const NpoPayout(
+        eventId: 'e1',
+        npoGroupId: 'g1',
+        hoursHundredths: 2000,
+        grossCents: 20000,
+        deductionsCents: 8000,
+        adjustmentCents: 1500,
+        totalCents: 13500,
+        status: 'paid',
+      ),
+      const NpoPayout(
+        eventId: 'e2',
+        npoGroupId: 'g1',
+        hoursHundredths: 1350,
+        grossCents: 16200,
+        deductionsCents: 3000,
+        totalCents: 13200,
+        status: 'approved',
+      ),
       const NpoPayout(eventId: 'e3', npoGroupId: 'g1', hoursHundredths: 100, grossCents: 1000, totalCents: 1000),
       const NpoPayout(eventId: 'e1', npoGroupId: 'g2', totalCents: 99999),
     ];
