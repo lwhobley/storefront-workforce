@@ -20,8 +20,9 @@ mixin _DemoOperations on _DemoCore implements OperationsRepository {
   final Map<String, Map<String, dynamic>> _opsIncidents = {};
   final Map<String, String> _opsNoteAuthors = {};
 
-  static final Uint8List _samplePhoto = base64Decode(
-      'iVBORw0KGgoAAAANSUhEUgAAAEAAAAAwCAIAAAAuKetIAAAAVUlEQVR42u3PsQ0AEAAAQeMolBKNSqE0gP0HsYBaiEu+/OZCTHlbbWPbbX8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAOA+YvTwdAAAAAAAAAAAAAMC/gAV2q7e5RaS/ogAAAABJRU5ErkJggg==');
+  static final Uint8List _samplePhoto = Uint8List.fromList(const [
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 64, 0, 0, 0, 48, 8, 2, 0, 0, 0, 46, 41, 235, 72, 0, 0, 0, 85, 73, 68, 65, 84, 120, 218, 237, 207, 177, 13, 0, 16, 0, 0, 65, 227, 40, 148, 18, 141, 74, 161, 52, 128, 253, 7, 177, 128, 90, 136, 75, 190, 252, 230, 66, 76, 121, 91, 109, 99, 219, 109, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 56, 15, 152, 189, 60, 29, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 192, 191, 128, 5, 118, 171, 183, 185, 69, 164, 191, 162, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+  ]);
 
   // ---- Access (same rules as the database) ----
 

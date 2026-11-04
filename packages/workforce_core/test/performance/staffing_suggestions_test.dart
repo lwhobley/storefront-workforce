@@ -98,8 +98,10 @@ void main() {
   });
 
   test('closest crowds first, at most six, newest breaks ties', () {
-    final history = [for (var i = 0; i < 9; i++) past('e$i', 10000 + i * 100, daysAgo: 30 - i)]
-      ..add(past('twin', 10000, daysAgo: 1));
+    final history = [
+      for (var i = 0; i < 9; i++) past('e$i', 10000 + i * 100, daysAgo: 30 - i),
+      past('twin', 10000, daysAgo: 1),
+    ];
     final similar = similarEvents(eventTypeCode: 'hockey', expectedAttendance: 10000, history: history);
     expect(similar.length, 6);
     expect(similar.map((e) => e.eventId).take(3), ['twin', 'e0', 'e1']);
