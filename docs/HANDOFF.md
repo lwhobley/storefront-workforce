@@ -89,14 +89,23 @@ see it on the board).
 
 ## Backend state (live Supabase project)
 
-- **Migrations applied: 0001–0018.** 0011–0014 (Phase 3) match this repo function for
+- **Migrations applied: 0001–0020.** 0011–0014 (Phase 3) match this repo function for
   function. **0015–0017** (report targets, ratings, do-not-rehire) were applied from
   another working copy whose app code is not on GitHub yet; the SQL was copied into this
   repo from the live project's migration history, and 0017 was checked to match the live
   function exactly. **0018** (partner privacy, card review) was applied November 4 and
   builds on 0017's `assignment_block_reason`, keeping the do-not-rehire check.
+- **0019 and 0020** (applied November 4) fix what a three-way code review of Phase 3 found:
+  coworker details no longer leak through swap errors, closed storefronts' positions
+  can't be picked up, partners can't read punch GPS or photo paths, a minor's waiver
+  needs a guardian, ratings and do-not-rehire flags are audited, failed notifications
+  stop after 5 attempts, and one venue's bad setting can't stop other venues' reminders.
+  Every public function on the live project was checked against the tested code after
+  applying. Known gap left on purpose: `events.labor_budget` is still readable by any
+  venue member from the table itself, because the app selects events with `*`; fix by
+  listing columns in the app, then revoking that column.
 - **Two working copies:** whoever pushes the Phase 4 app code must rebase onto `main` and
-  keep these migration numbers. New migrations start at 0019.
+  keep these migration numbers. New migrations start at 0021.
 - **Edge functions deployed:** `pin-login`, `kiosk-punch`, `staff-admin`, `event-sync`.
   Not deployed: `notify-dispatch`. `setup-sql` is a disabled loader (returns 410) and
   can be deleted.
@@ -139,7 +148,7 @@ see it on the board).
 ## Next steps, in order
 
 1. Decide the onboarding backfill and write the real onboarding documents (see Phase 3 notes).
-2. Apply the review fixes (0019, 0020) to the live project. Deploy `notify-dispatch` once
+2. Deploy `notify-dispatch` once
    secrets exist. Smoke-test the connected app with the sample PINs.
 3. Push registration in the app: add `firebase_messaging`, register tokens with
    `registerPushToken`, and wire the `unreadCountProvider` badge in the nav.
