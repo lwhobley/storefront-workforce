@@ -56,6 +56,9 @@ abstract class _DemoCore implements WorkforceRepository {
   late List<StaffingNeed> _needs;
   late Map<String, Worker> _workers;
   final List<AssignmentChange> _changes = [];
+  ReportTargets _reportTargets = ReportTargets.defaults;
+  final List<WorkerRating> _ratings = [];
+  final Map<String, String> _rehireFlags = {};
   final Map<String, StreamController<void>> _streams = {};
   final Map<String, AppSession> _sessionsByPin = {};
   AppSession? _session;
@@ -608,6 +611,54 @@ abstract class _DemoCore implements WorkforceRepository {
         final workerId = session.workerId;
         if (workerId == null) throw const AppFailure('No staff record is linked to this sign-in');
         return _store(workerId, draft, PunchSource.phone, photo: photo != null);
+      });
+
+  // ---- Reports ----
+
+  @override
+  Future<ReportTargets> loadReportTargets(AppSession session) => _delay(() {
+        _requirePerm('view_reports');
+        return _reportTargets;
+      });
+
+  @override
+  Future<void> saveReportTargets(AppSession session, ReportTargets targets) => _delay(() {
+        _requirePerm('manage_settings');
+        _reportTargets = targets;
+      });
+
+  @override
+  Future<List<WorkerRating>> loadWorkerRatings(AppSession session) => _delay(() {
+        _requirePerm('view_workers');
+        return [..._ratings]..sort((a, b) => b.ratedAt.compareTo(a.ratedAt));
+      });
+
+  @override
+  Future<void> rateWorker(AppSession session, {required String workerId, String? eventId, required int stars, String note = ''}) => _delay(() {
+        _requirePerm('manage_workers');
+        if (!isValidStars(stars)) throw const AppFailure('Stars run from 1 to 5');
+        if (!_workers.containsKey(workerId)) throw const AppFailure('Staff member not found');
+        _ratings.add(WorkerRating(id: _id(), workerId: workerId, eventId: eventId, stars: stars, note: note.trim(), ratedAt: DateTime.now().toUtc()));
+      });
+
+  @override
+  Future<Map<String, String>> loadRehireFlags(AppSession session) => _delay(() {
+        _requirePerm('view_workers');
+        return Map.of(_rehireFlags);
+      });
+
+  @override
+  Future<void> flagDoNotRehire(AppSession session, String workerId, String reason) => _delay(() {
+        _requirePerm('manage_workers');
+        if (reason.trim().isEmpty) throw const AppFailure('Give a reason');
+        if (!_workers.containsKey(workerId)) throw const AppFailure('Staff member not found');
+        _rehireFlags[workerId] = reason.trim();
+      });
+
+  @override
+  Future<void> clearDoNotRehire(AppSession session, String workerId) => _delay(() {
+        _requirePerm('manage_workers');
+        _rehireFlags.remove(workerId);
       });
 
   // ---- Pay ----

@@ -6,6 +6,9 @@ import 'enums.dart';
 
 DateTime? _instant(Object? v) => v == null ? null : DateTime.parse(v as String).toUtc();
 DateTime _instantReq(Object? v) => DateTime.parse(v as String).toUtc();
+
+/// Money stored as dollars (numeric) in the database, kept as whole cents.
+int? _dollarsToCents(Object? v) => v == null ? null : ((v as num) * 100).round();
 String? _iso(DateTime? d) => d?.toUtc().toIso8601String();
 
 /// A calendar date with no time of day (birth dates, expirations).
@@ -496,6 +499,7 @@ class Event {
     this.source = 'manual',
     this.externalId,
     this.notes = '',
+    this.laborBudgetCents,
   });
 
   final String id;
@@ -519,6 +523,9 @@ class Event {
   final String? externalId;
   final String notes;
 
+  /// Labor budget for the whole event; null when none is set.
+  final int? laborBudgetCents;
+
   Event copyWith({EventStatus? status, int? actualAttendance, int? expectedAttendance}) => Event(
         id: id,
         venueId: venueId,
@@ -534,6 +541,7 @@ class Event {
         source: source,
         externalId: externalId,
         notes: notes,
+        laborBudgetCents: laborBudgetCents,
       );
 
   factory Event.fromJson(Map<String, dynamic> j) => Event(
@@ -551,6 +559,7 @@ class Event {
         source: (j['source'] as String?) ?? 'manual',
         externalId: j['external_id'] as String?,
         notes: (j['notes'] as String?) ?? '',
+        laborBudgetCents: _dollarsToCents(j['labor_budget']),
       );
 
   Map<String, dynamic> toJson() => {

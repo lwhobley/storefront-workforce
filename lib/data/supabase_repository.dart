@@ -206,6 +206,51 @@ abstract class _SupabaseCore implements WorkforceRepository {
       });
 
   @override
+  Future<ReportTargets> loadReportTargets(AppSession session) => _guard(() async {
+        final row = await client.from('report_targets').select().eq('venue_id', session.venue.id).maybeSingle();
+        return row == null ? ReportTargets.defaults : ReportTargets.fromRow(row);
+      });
+
+  @override
+  Future<void> saveReportTargets(AppSession session, ReportTargets targets) => _guard(() async {
+        await client.from('report_targets').upsert({...targets.toRow(), 'venue_id': session.venue.id});
+      });
+
+  @override
+  Future<List<WorkerRating>> loadWorkerRatings(AppSession session) => _guard(() async {
+        final rows = await client.from('worker_ratings').select().eq('venue_id', session.venue.id).order('rated_at', ascending: false);
+        return [for (final r in rows) WorkerRating.fromRow(r)];
+      });
+
+  @override
+  Future<void> rateWorker(AppSession session, {required String workerId, String? eventId, required int stars, String note = ''}) =>
+      _guard(() async {
+        await client.from('worker_ratings').insert({
+          'venue_id': session.venue.id,
+          'worker_id': workerId,
+          'event_id': eventId,
+          'stars': stars,
+          'note': note,
+        });
+      });
+
+  @override
+  Future<Map<String, String>> loadRehireFlags(AppSession session) => _guard(() async {
+        final rows = await client.from('rehire_flags').select('worker_id, reason').eq('venue_id', session.venue.id);
+        return {for (final r in rows) r['worker_id'] as String: r['reason'] as String};
+      });
+
+  @override
+  Future<void> flagDoNotRehire(AppSession session, String workerId, String reason) => _guard(() async {
+        await client.from('rehire_flags').upsert({'venue_id': session.venue.id, 'worker_id': workerId, 'reason': reason.trim()});
+      });
+
+  @override
+  Future<void> clearDoNotRehire(AppSession session, String workerId) => _guard(() async {
+        await client.from('rehire_flags').delete().eq('venue_id', session.venue.id).eq('worker_id', workerId);
+      });
+
+  @override
   Future<String> syncEvents(AppSession session) => _guard(() async {
         final response = await client.functions.invoke('event-sync', body: {'venue_id': session.venue.id});
         final results = (response.data as Map)['results'] as List? ?? const [];

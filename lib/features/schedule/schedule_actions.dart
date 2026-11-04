@@ -61,9 +61,14 @@ class _AssignSheet extends ConsumerStatefulWidget {
 class _AssignSheetState extends ConsumerState<_AssignSheet> {
   late final Future<List<MarketCandidate>> _candidates = _load();
 
+  /// Do-not-rehire reasons by person, for the checks below.
+  Map<String, String> _rehireReasons = const {};
+
   /// Candidates with what each said about the event (available, unavailable, blackout).
   Future<List<MarketCandidate>> _load() async {
     final repo = ref.read(repositoryProvider);
+    final session = ref.read(sessionProvider)!;
+    if (session.canVenueWide(Perm.viewWorkers)) _rehireReasons = await repo.loadRehireFlags(session);
     if (repo is ShiftMarketRepository) {
       return (repo as ShiftMarketRepository).candidatesWithAvailability(widget.board.event.id, widget.role.code);
     }
@@ -152,6 +157,7 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
                   rules: rules,
                   timeZone: widget.board.timeZone,
                   certName: widget.venue.certName,
+                  doNotRehireReason: _rehireReasons[c.worker.id],
                 );
                 if (_hideBlocked && check.blocks.isNotEmpty) continue;
                 rows.add((c, check, m.availability));

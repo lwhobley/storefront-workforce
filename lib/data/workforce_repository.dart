@@ -76,6 +76,29 @@ abstract class WorkforceRepository {
   Future<void> saveNpoPayout(NpoPayout payout);
   Future<void> setNpoPayoutStatus(String payoutId, String status, {String reference = ''});
 
+  // ---- Reports ----
+
+  /// The venue's green and yellow bounds for the reports (the defaults when none are saved).
+  Future<ReportTargets> loadReportTargets(AppSession session);
+
+  /// Needs manage_settings. Throws [AppFailure] for bounds that break the rules.
+  Future<void> saveReportTargets(AppSession session, ReportTargets targets);
+
+  /// Every rating at the venue, newest first. Needs view_workers.
+  Future<List<WorkerRating>> loadWorkerRatings(AppSession session);
+
+  /// Adds a rating; ratings are never edited. Needs manage_workers.
+  Future<void> rateWorker(AppSession session, {required String workerId, String? eventId, required int stars, String note = ''});
+
+  /// People flagged do-not-rehire, with the reason for each. Needs view_workers.
+  Future<Map<String, String>> loadRehireFlags(AppSession session);
+
+  /// Flags a person do-not-rehire with a reason. Needs manage_workers.
+  Future<void> flagDoNotRehire(AppSession session, String workerId, String reason);
+
+  /// Clears a do-not-rehire flag. Needs manage_workers.
+  Future<void> clearDoNotRehire(AppSession session, String workerId);
+
   // ---- Kiosk ----
   Future<KioskIdentity> kioskIdentify(String pin);
   Future<void> kioskPunch(String pin, PunchDraft draft, {Uint8List? photo});

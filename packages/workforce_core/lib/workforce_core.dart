@@ -30,4 +30,8 @@ export 'src/rules/venue_rules.dart';
 export 'src/rules/work_interval.dart';
 export 'src/sample/sample_arena.dart';
 export 'src/layout/cutx_layout.dart';
+export 'src/reports/event_kpis.dart';
+export 'src/reports/report_targets.dart';
+export 'src/reports/worker_ratings.dart';
+export 'src/reports/workforce_reports.dart';
 export 'src/sample/sample_pay.dart';

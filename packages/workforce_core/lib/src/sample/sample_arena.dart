@@ -1087,6 +1087,7 @@ class _Generator {
           source: manual ? 'manual' : 'premium_command',
           externalId: ext,
           notes: notes,
+          laborBudgetCents: expected * 1500,
         ),
       ));
     }
