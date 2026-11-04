@@ -1,7 +1,7 @@
-# Tests, builds the web app, and deploys it to Cloudflare on every push to main.
+# Tests, builds the web app, and deploys it to Cloudflare Pages on every push to main.
 #
 # One-time setup in GitHub (Settings > Secrets and variables > Actions > Secrets):
-#   CLOUDFLARE_API_TOKEN   token made from the "Edit Cloudflare Workers" template
+#   CLOUDFLARE_API_TOKEN   token with Account > Cloudflare Pages > Edit
 #   CLOUDFLARE_ACCOUNT_ID  Account ID from the Cloudflare dashboard
 #
 # The Supabase URL and publishable key below are public by design (they ship inside the
@@ -62,9 +62,20 @@ jobs:
             echo "::error::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID under Settings > Secrets and variables > Actions."
             exit 1
           fi
-      - name: Deploy to Cloudflare
+      # Pages hosts the static build. The project is created on the first run; later runs
+      # see it exists and skip that step.
+      - name: Create Pages project if missing
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
+          wranglerVersion: "4.157.0"
+          command: pages project create storefront-workforce --production-branch=main
+        continue-on-error: true
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.157.0"
+          command: pages deploy build/web --project-name=storefront-workforce --branch=main --commit-dirty=true

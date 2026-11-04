@@ -45,14 +45,13 @@ Only the publishable key goes in the app, never the service-role key.
 
 ## Web app on Cloudflare
 
-Every push to `main` runs the tests, builds the web app, and deploys it as the Cloudflare
-Worker `storefront-workforce` (static files only; see `wrangler.jsonc` and
-`.github/workflows/deploy-web.yml`). It is served at
-`https://storefront-workforce.<your-subdomain>.workers.dev`.
+Every push to `main` runs the tests, builds the web app, and deploys it to the
+Cloudflare Pages project `storefront-workforce` (created on the first run), served at
+`https://storefront-workforce.pages.dev`. See `.github/workflows/deploy-web.yml`.
 
 - The deployed app connects to Supabase. Add `?demo` to the address for demo mode.
-- One-time setup: add the GitHub Actions secrets `CLOUDFLARE_API_TOKEN` (from the
-  "Edit Cloudflare Workers" token template) and `CLOUDFLARE_ACCOUNT_ID`.
+- One-time setup: add the GitHub Actions secrets `CLOUDFLARE_API_TOKEN` (a token with
+  Account > Cloudflare Pages > Edit) and `CLOUDFLARE_ACCOUNT_ID`.
 
 ## Tests
 
