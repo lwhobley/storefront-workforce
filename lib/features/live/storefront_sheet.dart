@@ -85,8 +85,12 @@ class StorefrontPanel extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('$kindLabel ${sf.code} · Section ${sf.section}'.toUpperCase(), style: AppText.kicker),
+              Text([kindLabel, if (sf.section.isNotEmpty) 'Section ${sf.section}'].join(' · ').toUpperCase(), style: AppText.kicker),
               Text(sf.name, style: AppText.screenTitle.copyWith(fontSize: 26)),
+              if (sf.description.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(sf.description, style: AppText.meta),
+              ],
               const SizedBox(height: 12),
               if (!summary.isOpen)
                 const StatusTag('Closed for this event', Tone.idle)

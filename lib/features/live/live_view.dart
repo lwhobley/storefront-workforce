@@ -214,7 +214,7 @@ class _Attention extends ConsumerWidget {
 
   String _where(Shift s) {
     final sf = venue.storefront(s.storefrontId);
-    return '${sf?.code ?? ''} ${sf?.name ?? ''} · ${venue.roleName(s.jobRoleCode)}';
+    return '${sf?.name ?? ''} · ${venue.roleName(s.jobRoleCode)}';
   }
 
   Widget _row(BuildContext context, LiveShiftStatus c, String detail) {
@@ -250,7 +250,7 @@ class _Attention extends ConsumerWidget {
             ListTile(
               dense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
-              title: Text('${venue.storefront(e.key)?.code} ${venue.storefront(e.key)?.name}'),
+              title: Text(venue.storefront(e.key)?.name ?? ''),
               subtitle: Text([
                 for (final c in openPositions.where((c) => c.shift.storefrontId == e.key)) venue.roleName(c.shift.jobRoleCode),
               ].join(', ')),
@@ -299,7 +299,7 @@ class _Attention extends ConsumerWidget {
               dense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
               title: Text('${board.workers[ch.workerId]?.worker.displayName ?? ''} ${ch.action}'
-                  '${ch.action == 'moved' ? ' ${venue.storefront(ch.fromStorefrontId ?? '')?.code} → ${venue.storefront(ch.toStorefrontId ?? '')?.code}' : ''}'),
+                  '${ch.action == 'moved' ? ' ${mapLabel(venue.storefront(ch.fromStorefrontId ?? '')?.name ?? '')} → ${mapLabel(venue.storefront(ch.toStorefrontId ?? '')?.name ?? '')}' : ''}'),
               subtitle: Text('${time.format(atVenue(ch.changedAt, zone))} · ${ch.changedByName} · ${ch.reason}'),
             ),
         ],

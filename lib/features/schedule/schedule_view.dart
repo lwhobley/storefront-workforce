@@ -44,7 +44,7 @@ class _ScheduleViewState extends ConsumerState<ScheduleView> {
                 ]),
                 for (final level in venue.levels) ...[
                   Padding(padding: const EdgeInsets.only(top: 12), child: Text(level.name, style: AppText.sectionHeading)),
-                  for (final s in venue.storefronts.where((s) => s.levelId == level.id))
+                  for (final s in venue.storefronts.where((s) => s.levelId == level.id && s.active))
                     CheckboxListTile(
                       dense: true,
                       value: selected.contains(s.id),
@@ -266,7 +266,7 @@ class _StorefrontTile extends ConsumerWidget {
     return ExpansionTile(
       tilePadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
       childrenPadding: const EdgeInsets.only(bottom: 12),
-      title: Text('${storefront.code} · ${storefront.name}'),
+      title: Text(storefront.name),
       subtitle: Padding(
         padding: const EdgeInsets.only(top: 6),
         child: Row(children: [

@@ -195,8 +195,8 @@ Future<void> showMoveDialog(BuildContext context, WidgetRef ref, EventBoard boar
   final worker = board.workers[shift.workerId]?.worker;
   final targets = [
     for (final s in venue.storefronts)
-      if (board.openStorefrontIds.contains(s.id) && s.id != shift.storefrontId) s,
-  ]..sort((a, b) => a.code.compareTo(b.code));
+      if (board.openStorefrontIds.contains(s.id) && s.id != shift.storefrontId && s.active) s,
+  ]..sort((a, b) => a.name.compareTo(b.name));
   String? to;
   var role = shift.jobRoleCode;
   final reason = TextEditingController();
@@ -221,7 +221,7 @@ Future<void> showMoveDialog(BuildContext context, WidgetRef ref, EventBoard boar
                     for (final s in targets)
                       DropdownMenuItem(
                         value: s.id,
-                        child: Text('${s.code} · ${s.name}${openAt(s.id) > 0 ? '  (${openAt(s.id)} open ${venue.roleName(role).toLowerCase()})' : ''}'),
+                        child: Text('${s.name}${openAt(s.id) > 0 ? '  (${openAt(s.id)} open ${venue.roleName(role).toLowerCase()})' : ''}'),
                       ),
                   ],
                   onChanged: (v) => setState(() => to = v),

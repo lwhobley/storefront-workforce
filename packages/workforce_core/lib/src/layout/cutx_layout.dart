@@ -114,6 +114,57 @@ class VenueMapLayout {
     return out;
   }
 
+  /// A point on the concourse in a direction from the bowl center (radians: 0 = east,
+  /// pi/2 = south, pi = west, -pi/2 = north, as drawn).
+  MapPoint concourseSpotAt(double angle, {double depth = 0.55}) {
+    final (inner, outer) = _crossings(angle);
+    return (_r(inner.$1 + (outer.$1 - inner.$1) * depth), _r(inner.$2 + (outer.$2 - inner.$2) * depth));
+  }
+
+  /// The point on the middle of the concourse closest to a seating section, so a stand
+  /// "at section 103" sits right behind 103. [nudge] slides it along the concourse by
+  /// that fraction of the full loop (positive = clockwise), for two storefronts at one section.
+  MapPoint concourseSpotNearSection(String name, {double depth = 0.55, double nudge = 0}) {
+    final target = sections.firstWhere((s) => s.name == name).center;
+    const samples = 720;
+    var best = 0;
+    var bestDist = double.infinity;
+    for (var i = 0; i < samples; i++) {
+      final p = concourseSpotAt(-pi / 2 + 2 * pi * i / samples, depth: depth);
+      final d = pow((p.$1 - target.$1) * aspectRatio, 2) + pow(p.$2 - target.$2, 2);
+      if (d < bestDist) {
+        bestDist = d.toDouble();
+        best = i;
+      }
+    }
+    if (nudge == 0) return concourseSpotAt(-pi / 2 + 2 * pi * best / samples, depth: depth);
+    // Slide along the loop by arc length, not angle, so the gap looks the same everywhere.
+    final spots = concourseSpots(samples, depth: depth);
+    final here = concourseSpotAt(-pi / 2 + 2 * pi * best / samples, depth: depth);
+    var start = 0;
+    var startDist = double.infinity;
+    for (var i = 0; i < samples; i++) {
+      final d = pow((spots[i].$1 - here.$1) * aspectRatio, 2) + pow(spots[i].$2 - here.$2, 2);
+      if (d < startDist) {
+        startDist = d.toDouble();
+        start = i;
+      }
+    }
+    return spots[(start + (nudge * samples).round()) % samples];
+  }
+
+  /// A named side of the concourse: north, south, east, or west.
+  MapPoint concourseSide(String side, {double depth = 0.55, double nudge = 0}) => concourseSpotAt(
+        switch (side) {
+          'north' => -pi / 2,
+          'south' => pi / 2,
+          'east' => 0.0,
+          _ => pi,
+        } +
+            nudge,
+        depth: depth,
+      );
+
   /// The seating section nearest a point on the concourse, by direction from the bowl center.
   MapSection nearestSection(MapPoint p) {
     final c = bowlCenter;

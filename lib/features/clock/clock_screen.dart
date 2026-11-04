@@ -291,6 +291,11 @@ class _ShiftCard extends StatelessWidget {
                   .join(' · '),
               style: AppText.body.copyWith(fontSize: 17),
             ),
+            if ((shift.storefront?.description ?? '').isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(shift.storefront!.description, style: AppText.meta),
+              ),
             const SizedBox(height: 14),
             Row(
               children: [

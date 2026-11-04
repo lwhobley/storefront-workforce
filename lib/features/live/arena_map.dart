@@ -37,14 +37,37 @@ class ArenaMap extends StatelessWidget {
       aspectRatio: plan?.aspectRatio ?? 1.45,
       child: LayoutBuilder(
         builder: (context, box) {
-          final pinSize = (box.maxWidth / (plan == null ? 15 : 18)).clamp(28.0, 44.0);
+          final shown = [for (final s in storefronts) if (s.active) s];
+          // A small lineup leaves room to print each name next to its pin.
+          final named = shown.length <= 16;
+          final pinSize = (box.maxWidth / (named ? 14 : (plan == null ? 15 : 18))).clamp(28.0, 48.0);
+          const labelWidth = 104.0;
           return Stack(
             clipBehavior: Clip.none,
             children: [
               Positioned.fill(
                 child: CustomPaint(painter: plan == null ? _BowlPainter(levelName) : _PlanPainter(plan, levelName)),
               ),
-              for (final s in storefronts)
+              if (named)
+                for (final s in shown)
+                  Positioned(
+                    // Labels sit inside the map: below pins on the top half, above on the
+                    // bottom half, and pulled in from the left and right walls.
+                    left: (s.mapX * box.maxWidth - labelWidth / 2).clamp(0.0, box.maxWidth - labelWidth),
+                    top: s.mapY < 0.5 ? s.mapY * box.maxHeight + pinSize / 2 + 2 : null,
+                    bottom: s.mapY >= 0.5 ? (1 - s.mapY) * box.maxHeight + pinSize / 2 + 2 : null,
+                    width: labelWidth,
+                    child: IgnorePointer(
+                      child: Text(
+                        mapLabel(s.name),
+                        textAlign: s.mapX < 0.12 ? TextAlign.left : s.mapX > 0.88 ? TextAlign.right : TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11, height: 1.15, fontWeight: FontWeight.w700, color: AppColors.text),
+                      ),
+                    ),
+                  ),
+              for (final s in shown)
                 Positioned(
                   left: s.mapX * box.maxWidth - pinSize / 2,
                   top: s.mapY * box.maxHeight - pinSize / 2,
@@ -54,6 +77,7 @@ class ArenaMap extends StatelessWidget {
                     storefront: s,
                     summary: summaries[s.id],
                     size: pinSize,
+                    showCode: !named,
                     selected: s.id == selectedId,
                     onTap: () => onTap(s),
                   ),
@@ -66,14 +90,28 @@ class ArenaMap extends StatelessWidget {
   }
 }
 
+/// The name drawn on the map: sponsor credits ("presented by ...") are dropped.
+String mapLabel(String name) {
+  final i = name.toLowerCase().indexOf(' presented by');
+  return i > 0 ? name.substring(0, i) : name;
+}
+
 class _Pin extends StatelessWidget {
-  const _Pin({required this.storefront, required this.summary, required this.size, required this.selected, required this.onTap});
+  const _Pin({
+    required this.storefront,
+    required this.summary,
+    required this.size,
+    required this.selected,
+    required this.onTap,
+    this.showCode = true,
+  });
 
   final Storefront storefront;
   final StorefrontSummary? summary;
   final double size;
   final bool selected;
   final VoidCallback onTap;
+  final bool showCode;
 
   IconData get _icon => switch (storefront.kind) {
         StorefrontKind.bar => Icons.local_bar,
@@ -114,8 +152,9 @@ class _Pin extends StatelessWidget {
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(_icon, size: size * 0.34, color: closed ? AppColors.idle : Colors.white),
-                    Text(
+                    Icon(_icon, size: size * (showCode ? 0.34 : 0.5), color: closed ? AppColors.idle : Colors.white),
+                    if (showCode)
+                      Text(
                       storefront.code,
                       maxLines: 1,
                       overflow: TextOverflow.clip,

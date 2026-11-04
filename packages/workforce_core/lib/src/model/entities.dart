@@ -91,6 +91,7 @@ class Storefront {
     required this.mapX,
     required this.mapY,
     this.active = true,
+    this.description = '',
   });
 
   final String id;
@@ -108,6 +109,9 @@ class Storefront {
   final double mapY;
   final bool active;
 
+  /// What it serves, shown to staff (for example "Pizza by the slice").
+  final String description;
+
   factory Storefront.fromJson(Map<String, dynamic> j) => Storefront(
         id: j['id'] as String,
         venueId: j['venue_id'] as String,
@@ -119,6 +123,7 @@ class Storefront {
         mapX: (j['map_x'] as num?)?.toDouble() ?? 0.5,
         mapY: (j['map_y'] as num?)?.toDouble() ?? 0.5,
         active: (j['active'] as bool?) ?? true,
+        description: (j['description'] as String?) ?? '',
       );
 
   Map<String, dynamic> toJson() => {
@@ -132,6 +137,7 @@ class Storefront {
         'map_x': mapX,
         'map_y': mapY,
         'active': active,
+        'description': description,
       };
 }
 
