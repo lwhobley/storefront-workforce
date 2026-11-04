@@ -23,7 +23,7 @@ mixin _SupabasePeople on _SupabaseCore implements PeopleRepository {
             .order('id', ascending: true)
             .range(a, b));
         final eventIds = {for (final p in punches) ?p['event_id'] as String?}.toList();
-        final events = eventIds.isEmpty ? <Map<String, dynamic>>[] : await client.from('events').select().inFilter('id', eventIds);
+        final events = eventIds.isEmpty ? <Map<String, dynamic>>[] : await client.from('events').select(eventReadColumns).inFilter('id', eventIds);
         final shifts = eventIds.isEmpty
             ? <Map<String, dynamic>>[]
             : await client.from('shifts').select().eq('worker_id', workerId).inFilter('event_id', eventIds);

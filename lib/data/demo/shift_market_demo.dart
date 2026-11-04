@@ -34,6 +34,15 @@ class _SmRequest {
 /// 0012_shift_market.sql. Sample requests, availability answers and blackouts are added
 /// the first time any of these features is used.
 mixin _DemoShiftMarket on _DemoCore implements ShiftMarketRepository {
+  /// The block reason for the person asking about themself, as the server's
+  /// self_block_reason (0019): their own age and card reasons as they are, a
+  /// do-not-rehire flag as a neutral message.
+  String? _selfBlockReason(Worker w, Event e, String role, String shiftId) {
+    final reason = _blockReason(w, e, role, shiftId);
+    if (reason != null && _doNotRehire(w.id)) return "You can't pick up shifts right now. Talk to a manager.";
+    return reason;
+  }
+
   final Stopwatch _smClock = Stopwatch()..start();
   final Map<String, _SmRequest> _smRequests = {};
 
@@ -359,7 +368,7 @@ mixin _DemoShiftMarket on _DemoCore implements ShiftMarketRepository {
             storefrontCode: f?.code ?? '',
             section: f?.section ?? '',
             roleName: _smRoleName(s.jobRoleCode),
-            blocked: _blockReason(w, e, s.jobRoleCode, s.id),
+            blocked: _selfBlockReason(w, e, s.jobRoleCode, s.id),
             myRequestId: _smRequests.values
                 .where((q) => q.shiftId == s.id && q.requesterId == w.id && q.kind == ShiftRequestKind.pickup && q.status == ShiftRequestStatus.pending)
                 .firstOrNull
@@ -386,7 +395,7 @@ mixin _DemoShiftMarket on _DemoCore implements ShiftMarketRepository {
         if (!s.isOpen) throw const AppFailure('This shift is already filled');
         if (!s.callTime.isAfter(_smNow) || !_smUpcoming(e)) throw const AppFailure('This shift is no longer available');
         if (!w.jobRoles.contains(s.jobRoleCode)) throw const AppFailure('You are not trained for this role');
-        final block = _blockReason(w, e, s.jobRoleCode, s.id);
+        final block = _selfBlockReason(w, e, s.jobRoleCode, s.id);
         if (block != null) throw AppFailure(block);
         if (_smHasOpen(s.id, w.id)) throw const AppFailure('You already asked for this shift');
         final q = _SmRequest(id: _id(), kind: ShiftRequestKind.pickup, shiftId: s.id, requesterId: w.id, note: note, createdAt: _smNow);
@@ -482,7 +491,7 @@ mixin _DemoShiftMarket on _DemoCore implements ShiftMarketRepository {
           if (s.workerId != q.requesterId || s.status != ShiftStatus.assigned || !s.callTime.isAfter(_smNow)) {
             throw const AppFailure('This offer is no longer open');
           }
-          final block = _blockReason(w, _events[s.eventId]!, s.jobRoleCode, s.id);
+          final block = _selfBlockReason(w, _events[s.eventId]!, s.jobRoleCode, s.id);
           if (block != null) throw AppFailure(block);
           q.status = ShiftRequestStatus.pending;
           _notifyWorker(q.requesterId, kind: 'request_update', title: '${w.displayName} accepted your swap. A manager will approve it.', body: _smLabel(s), link: '/schedule');

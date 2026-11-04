@@ -9,6 +9,7 @@ import '../../core/time/venue_time.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../data/shift_market_repository.dart';
+import '../performance/staffing_suggestions_sheet.dart';
 import '../shift_market/market_providers.dart';
 import 'schedule_actions.dart';
 
@@ -190,6 +191,12 @@ class _ScheduleViewState extends ConsumerState<ScheduleView> {
                           onPressed: _generate,
                           icon: const Icon(Icons.playlist_add),
                           label: Text(missingPositions > 0 ? 'Create $missingPositions open positions' : 'Create open positions'),
+                        ),
+                      if (session.canVenueWide(Perm.manageSchedule) && event.status != EventStatus.completed)
+                        OutlinedButton.icon(
+                          onPressed: () => showStaffingSuggestions(context, event.id),
+                          icon: const Icon(Icons.auto_graph),
+                          label: const Text('Staffing suggestions'),
                         ),
                     ],
                   ),

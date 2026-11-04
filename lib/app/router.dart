@@ -17,9 +17,12 @@ import '../features/people/onboarding_screen.dart';
 import '../features/people/partner_screen.dart';
 import '../features/shift_market/requests_screen.dart';
 import '../features/shift_market/schedule_screen.dart';
+import '../features/performance/rankings_screen.dart';
 import '../features/staff/staff_screen.dart';
 import '../features/operations/checklists_screen.dart';
 import '../features/operations/incidents_screen.dart';
+import '../features/operations/ops_queue.dart';
+import '../features/reports/event_report_screen.dart';
 import '../features/reports/reports_screen.dart';
 import 'more_screen.dart';
 import 'providers.dart';
@@ -102,6 +105,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, state) => EventScreen(eventId: state.pathParameters['id']!),
           ),
           GoRoute(path: '/staff', builder: (_, _) => const StaffScreen()),
+          GoRoute(path: '/staff/rankings', builder: (_, _) => const RankingsScreen()),
           GoRoute(path: '/pay', builder: (_, _) => const PayScreen()),
           GoRoute(
             path: '/pay/period/:id',
@@ -117,6 +121,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingScreen()),
           GoRoute(path: '/partner', builder: (_, _) => const PartnerScreen()),
           GoRoute(path: '/reports', builder: (_, _) => const ReportsScreen()),
+          GoRoute(
+            path: '/reports/event/:id',
+            builder: (_, state) => EventReportScreen(eventId: state.pathParameters['id']!, season: int.tryParse(state.uri.queryParameters['season'] ?? '')),
+          ),
           GoRoute(path: '/checklists', builder: (_, _) => const ChecklistsScreen()),
           GoRoute(path: '/incidents', builder: (_, _) => const IncidentsScreen()),
         ],
@@ -136,6 +144,8 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     if (session == null) return child;
+    // Keeps the checklist and incident outbox sending in the background on any screen.
+    if (session.isManagerView) ref.listen(opsQueueProvider, (_, _) {});
     final all = navFor(session);
     if (all.length < 2) return child;
     final section = '/${location.split('/')[1]}';

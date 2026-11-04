@@ -8,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/time/venue_time.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
+import '../reports/live_kpi_strip.dart';
 import 'arena_map.dart';
 import 'live_model.dart';
 import 'storefront_sheet.dart';
@@ -69,6 +70,7 @@ class _LiveViewState extends ConsumerState<LiveView> {
 
     return LayoutBuilder(builder: (context, box) {
       final wide = box.maxWidth >= 1100;
+      final strip = LiveKpiStrip(board: board, cards: cards, rules: rules, now: now, needed: needed, assigned: assigned);
       final tiles = Wrap(
         spacing: 10,
         runSpacing: 10,
@@ -135,6 +137,8 @@ class _LiveViewState extends ConsumerState<LiveView> {
         return ListView(
           padding: const EdgeInsets.fromLTRB(AppSpace.screen, AppSpace.m, AppSpace.screen, 48),
           children: [
+            strip,
+            const SizedBox(height: AppSpace.m),
             tiles,
             const SizedBox(height: AppSpace.l),
             Row(
@@ -164,6 +168,7 @@ class _LiveViewState extends ConsumerState<LiveView> {
       return ListView(
         padding: const EdgeInsets.only(bottom: 48),
         children: [
+          Padding(padding: const EdgeInsets.fromLTRB(AppSpace.screen, AppSpace.m, AppSpace.screen, 0), child: strip),
           Padding(padding: const EdgeInsets.fromLTRB(AppSpace.screen, AppSpace.m, AppSpace.screen, AppSpace.l), child: tiles),
           Padding(padding: const EdgeInsets.symmetric(horizontal: AppSpace.screen), child: map),
           attention,

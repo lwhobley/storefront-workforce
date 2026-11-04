@@ -10,6 +10,7 @@ import '../../core/widgets/common.dart';
 import '../../data/comms_repository.dart';
 import '../../data/models.dart';
 import '../comms/compose.dart';
+import '../operations/checklist_run_sheet.dart';
 import '../schedule/schedule_actions.dart';
 import 'live_model.dart';
 
@@ -117,6 +118,10 @@ class StorefrontPanel extends ConsumerWidget {
                     if (summary.released > 0) StatusTag('${summary.released} sent home', Tone.idle),
                   ],
                 ),
+              if (summary.isOpen) ...[
+                const SizedBox(height: 8),
+                ChecklistChips(eventId: eventId, storefrontId: storefrontId),
+              ],
               if (canMessage) ...[
                 const SizedBox(height: 12),
                 Wrap(

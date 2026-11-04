@@ -8,6 +8,8 @@ import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../data/shift_market_repository.dart';
 import '../../data/workforce_repository.dart';
+import '../performance/performance_providers.dart';
+import '../performance/performance_section.dart';
 import '../shift_market/request_checks.dart';
 import 'assignment_checks.dart';
 
@@ -98,6 +100,8 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
   Widget build(BuildContext context) {
     final sf = widget.venue.storefront(widget.shift.storefrontId);
     final rules = widget.venue.rules;
+    // Reliability scores and do-not-rehire flags, for managers who may see them.
+    final insights = ref.watch(candidateInsightsProvider).value;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -178,7 +182,7 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
                           : '';
                   return ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
-                    enabled: check.blocks.isEmpty,
+                    enabled: check.blocks.isEmpty && !candidateFlagged(insights, w.id),
                     // Wraps on phones so the tags never push past the Assign button.
                     title: Wrap(
                       spacing: 4,
@@ -189,6 +193,7 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
                         StatusTag(workerTypeLabel(w.type), w.type == WorkerType.regular ? Tone.idle : Tone.info),
                         if (c.isMinor(rules.minors.adultAge)) StatusTag('Minor ${c.ageOnEvent}', Tone.warn),
                         ?_availabilityTag(said),
+                        ...candidateTags(insights, w.id),
                       ],
                     ),
                     subtitle: Text([
@@ -198,7 +203,7 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
                       for (final wn in check.warnings) '⚠ ${wn.message}',
                     ].join('\n')),
                     isThreeLine: check.blocks.length + check.warnings.length > 0,
-                    trailing: check.blocks.isEmpty
+                    trailing: check.blocks.isEmpty && !candidateFlagged(insights, w.id)
                         ? FilledButton.tonal(onPressed: () => _pick(c, check), child: const Text('Assign'))
                         : null,
                   );
