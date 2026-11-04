@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:test/test.dart';
+import 'package:workforce_core/src/layout/cutx_layout.dart';
 import 'package:workforce_core/src/model/entities.dart';
 import 'package:workforce_core/src/model/enums.dart';
 import 'package:workforce_core/src/sample/sample_arena.dart';
@@ -60,15 +61,18 @@ void main() {
       expect(arena.organization['name'], 'Pecan Valley Sports & Entertainment');
       expect(arena.venue.name, 'Pecan Valley Arena');
       expect(arena.venue.timeZone, 'America/Chicago');
-      expect(arena.levels.map((l) => l.name), ['Main Concourse', 'Club Level', 'Upper Concourse']);
+      expect(arena.levels.map((l) => l.name), ['Concourse']);
       expect(arena.storefronts, hasLength(40));
       int kind(StorefrontKind k) => arena.storefronts.where((s) => s.kind == k).length;
       expect(kind(StorefrontKind.bar), 8);
       expect(kind(StorefrontKind.portableCart), 6);
       expect(kind(StorefrontKind.kiosk), 4);
       expect(kind(StorefrontKind.permanentStand), 22);
-      int onLevel(int sort) => arena.storefronts.where((s) => s.levelId == arena.levels[sort - 1].id).length;
-      expect([onLevel(1), onLevel(2), onLevel(3)], [18, 8, 14]);
+      expect(arena.storefronts.every((s) => s.levelId == arena.levels.single.id), isTrue);
+      // Every storefront sits on the CUTX concourse, outside the bowl, labeled by a real section.
+      final sections = {for (final s in cutxLayout.sections) s.name};
+      expect(arena.storefronts.every((s) => sections.contains(s.section)), isTrue);
+      expect(arena.venue.settings['map'], {'layout': 'cutx'});
       for (final s in arena.storefronts) {
         expect(arena.stations.where((st) => st.storefrontId == s.id), isNotEmpty, reason: s.code);
       }

@@ -7,9 +7,11 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/common.dart';
 import 'live_model.dart';
 
-/// Schematic arena map for one level: the event floor in the middle, the concourse
-/// around it, and a pin for each storefront at its saved position. When a level has an
-/// uploaded floor plan it can be drawn underneath later; the pins keep their positions.
+/// Arena map for one level, with a pin for each storefront at its saved position.
+///
+/// When the venue has a traced plan ([layout], for example CUTX), the map draws that
+/// building: the outer wall, the concourse where the storefronts are, the seating
+/// sections, and the floor. Otherwise it draws a generic bowl.
 class ArenaMap extends StatelessWidget {
   const ArenaMap({
     super.key,
@@ -18,6 +20,7 @@ class ArenaMap extends StatelessWidget {
     required this.onTap,
     this.selectedId,
     this.levelName = '',
+    this.layout,
   });
 
   final List<Storefront> storefronts;
@@ -25,18 +28,22 @@ class ArenaMap extends StatelessWidget {
   final ValueChanged<Storefront> onTap;
   final String? selectedId;
   final String levelName;
+  final VenueMapLayout? layout;
 
   @override
   Widget build(BuildContext context) {
+    final plan = layout;
     return AspectRatio(
-      aspectRatio: 1.45,
+      aspectRatio: plan?.aspectRatio ?? 1.45,
       child: LayoutBuilder(
         builder: (context, box) {
-          final pinSize = (box.maxWidth / 15).clamp(30.0, 46.0);
+          final pinSize = (box.maxWidth / (plan == null ? 15 : 18)).clamp(28.0, 44.0);
           return Stack(
             clipBehavior: Clip.none,
             children: [
-              Positioned.fill(child: CustomPaint(painter: _BowlPainter(levelName))),
+              Positioned.fill(
+                child: CustomPaint(painter: plan == null ? _BowlPainter(levelName) : _PlanPainter(plan, levelName)),
+              ),
               for (final s in storefronts)
                 Positioned(
                   left: s.mapX * box.maxWidth - pinSize / 2,
@@ -140,6 +147,75 @@ class _Pin extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Draws a traced venue plan, concourse first.
+class _PlanPainter extends CustomPainter {
+  _PlanPainter(this.plan, this.levelName);
+
+  final VenueMapLayout plan;
+  final String levelName;
+
+  Path _path(List<MapPoint> pts, Size size) {
+    final path = Path()..moveTo(pts.first.$1 * size.width, pts.first.$2 * size.height);
+    for (final p in pts.skip(1)) {
+      path.lineTo(p.$1 * size.width, p.$2 * size.height);
+    }
+    return path..close();
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final edge = Paint()
+      ..color = AppColors.divider
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    // Outer wall and concourse: the walkway between the wall and the bowl, where the
+    // storefronts are. Drawn brightest, since it is what the map is about.
+    final wall = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(10));
+    canvas.drawRRect(wall, Paint()..color = AppColors.raised);
+    canvas.drawRRect(wall, Paint()
+      ..color = AppColors.ink(0.35)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2);
+
+    // Bowl: floor color first, seating sections on top; the uncovered middle is the floor.
+    final bowl = _path(plan.bowl, size);
+    canvas.drawPath(bowl, Paint()..color = const Color(0xFFDDE9EE));
+    canvas.drawPath(bowl, edge);
+    final seat = Paint()..color = AppColors.idleSoft;
+    final seatEdge = Paint()
+      ..color = AppColors.background
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final fontSize = (size.width * 0.018).clamp(8.0, 13.0);
+    for (final section in plan.sections) {
+      final path = _path(section.points, size);
+      canvas.drawPath(path, seat);
+      canvas.drawPath(path, seatEdge);
+      final c = section.center;
+      final tp = TextPainter(
+        text: TextSpan(text: section.name, style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w700, color: AppColors.muted)),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(c.$1 * size.width - tp.width / 2, c.$2 * size.height - tp.height / 2));
+    }
+
+    final center = plan.bowlCenter;
+    final label = TextPainter(
+      text: TextSpan(
+        text: 'FLOOR',
+        style: TextStyle(fontSize: fontSize * 1.1, fontWeight: FontWeight.w800, letterSpacing: 2, color: AppColors.ink(0.4)),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    label.paint(canvas, Offset(center.$1 * size.width - label.width / 2, center.$2 * size.height - label.height / 2));
+
+  }
+
+  @override
+  bool shouldRepaint(covariant _PlanPainter old) => old.plan != plan || old.levelName != levelName;
 }
 
 class _BowlPainter extends CustomPainter {

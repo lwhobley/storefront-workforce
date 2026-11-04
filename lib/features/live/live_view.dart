@@ -101,6 +101,7 @@ class _LiveViewState extends ConsumerState<LiveView> {
             ),
           const SizedBox(height: 12),
           ArenaMap(
+            layout: venueMapLayouts[(venue.venue.settings['map'] as Map?)?['layout']],
             storefronts: levelStorefronts,
             summaries: summaries,
             selectedId: _selected,

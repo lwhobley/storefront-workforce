@@ -10,6 +10,7 @@ library;
 
 import 'dart:math';
 
+import '../layout/cutx_layout.dart';
 import '../model/entities.dart';
 import '../model/enums.dart';
 import '../rules/venue_rules.dart';
@@ -401,6 +402,9 @@ class _Generator {
 
   final _defs = <String, _StorefrontDef>{};
   final _levelOf = <String, int>{};
+
+  /// The storefront's original key (section or cart code), used for stable ids.
+  final _keyOf = <String, String>{};
   final _stationsBy = <String, List<Station>>{};
   final _needsBy = <String, List<StaffingNeed>>{};
   final _roles = <String, JobRole>{};
@@ -416,7 +420,8 @@ class _Generator {
       organizationId: orgId,
       name: 'Pecan Valley Arena',
       timeZone: 'America/Chicago',
-      settings: rules.toJson(),
+      // The map is drawn from the CUTX plan; every storefront is on its concourse.
+      settings: {...rules.toJson(), 'map': {'layout': 'cutx'}},
       branding: const {'app_name': 'Storefront Workforce', 'primary_color': '#0088B0'},
     );
     _buildLayout();
@@ -491,31 +496,51 @@ class _Generator {
   // Levels, storefronts, stations, default staffing
 
   void _buildLayout() {
-    for (var i = 0; i < _levelDefs.length; i++) {
-      levels.add(VenueLevel(id: id('level:${i + 1}'), venueId: venueId, name: _levelDefs[i].$1, sort: i + 1));
-    }
-    for (final d in _storefrontDefs) {
+    // One level: the CUTX concourse, which wraps the lower bowl. The storefront list keeps
+    // its original three groups only to set staffing priority and variety; on the map they
+    // are interleaved evenly around the concourse.
+    levels.add(VenueLevel(id: id('level:1'), venueId: venueId, name: 'Concourse', sort: 1));
+    double fraction(_StorefrontDef d) {
       final (_, first, last) = _levelDefs[d.level - 1];
-      final count = last - first + 1;
-      final angle = -pi / 2 + 2 * pi * (d.section - first + 0.5) / count;
-      final inner = d.kind == _cart || d.kind == _kiosk ? 0.84 : 1.0;
-      final x = 0.5 + 0.42 * inner * cos(angle);
-      final y = 0.5 + 0.36 * inner * sin(angle);
-      final code = d.code ?? '${d.section}';
+      return (d.section - first + 0.5) / (last - first + 1);
+    }
+
+    final ordered = [..._storefrontDefs]..sort((a, b) {
+        final f = fraction(a).compareTo(fraction(b));
+        return f != 0 ? f : a.level.compareTo(b.level);
+      });
+    final spots = cutxLayout.concourseSpots(ordered.length, depth: 0.55);
+    final usedCodes = <String, int>{};
+    for (var i = 0; i < ordered.length; i++) {
+      final d = ordered[i];
+      final key = d.code ?? '${d.section}';
+      final spot = spots[i];
+      final section = cutxLayout.nearestSection(spot).name;
+      // Stands and bars are numbered by the nearest seating section (105, 105B...).
+      // Carts and kiosks keep their own codes.
+      String code;
+      if (d.code != null) {
+        code = d.code!;
+      } else {
+        final n = usedCodes.update(section, (v) => v + 1, ifAbsent: () => 1);
+        code = n == 1 ? section : '$section${String.fromCharCode(64 + n)}';
+      }
+      final name = RegExp(r' \d{3}$').hasMatch(d.name) ? '${d.name.substring(0, d.name.length - 4)} $code' : d.name;
       final sf = Storefront(
-        id: id('storefront:$code'),
+        id: id('storefront:$key'),
         venueId: venueId,
-        levelId: levels[d.level - 1].id,
+        levelId: levels.first.id,
         code: code,
-        name: d.name,
+        name: name,
         kind: d.kind,
-        section: '${d.section}',
-        mapX: (x * 10000).round() / 10000,
-        mapY: (y * 10000).round() / 10000,
+        section: section,
+        mapX: spot.$1,
+        mapY: spot.$2,
       );
       storefronts.add(sf);
       _defs[sf.id] = d;
       _levelOf[sf.id] = d.level;
+      _keyOf[sf.id] = key;
 
       final stationDefs = switch (d.kind) {
         _stand when d.size == _Size.large => const [
@@ -534,7 +559,7 @@ class _Generator {
       final list = <Station>[];
       for (final (name, role) in stationDefs) {
         list.add(
-          Station(id: id('station:$code:$name'), venueId: venueId, storefrontId: sf.id, name: name, jobRoleCode: role),
+          Station(id: id('station:$key:$name'), venueId: venueId, storefrontId: sf.id, name: name, jobRoleCode: role),
         );
       }
       stations.addAll(list);
@@ -1136,11 +1161,11 @@ class _Generator {
     final groupOrder = [for (var g = 0; g < npoGroups.length; g++) g]..shuffle(srng);
     for (final g in groupOrder) {
       if (!_chance(srng, 0.92)) continue;
-      var standId = storefronts.firstWhere((s) => s.code == _npoHomeStands[g]).id;
+      var standId = storefronts.firstWhere((s) => _keyOf[s.id] == _npoHomeStands[g]).id;
       if (!open.contains(standId) || claimed.contains(standId)) {
         final options = storefronts
             .where((s) => s.kind == _stand && open.contains(s.id) && !claimed.contains(s.id))
-            .where((s) => !_npoHomeStands.contains(s.code))
+            .where((s) => !_npoHomeStands.contains(_keyOf[s.id]))
             .toList();
         if (options.isEmpty) continue;
         standId = _pick(srng, options).id;
