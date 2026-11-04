@@ -1,12 +1,12 @@
 {
-    "name": "storefront_workforce",
-    "short_name": "storefront_workforce",
+    "name": "Storefront Workforce",
+    "short_name": "Workforce",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#F3F2F2",
+    "theme_color": "#0088B0",
+    "description": "Workforce management for arena concessions storefronts.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

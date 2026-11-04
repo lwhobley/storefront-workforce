@@ -43,6 +43,17 @@ flutter run -d chrome --dart-define=SUPABASE_URL=https://dhmxrojpkjuhhmpqyljp.su
 
 Only the publishable key goes in the app, never the service-role key.
 
+## Web app on Cloudflare
+
+Every push to `main` runs the tests, builds the web app, and deploys it as the Cloudflare
+Worker `storefront-workforce` (static files only; see `wrangler.jsonc` and
+`.github/workflows/deploy-web.yml`). It is served at
+`https://storefront-workforce.<your-subdomain>.workers.dev`.
+
+- The deployed app connects to Supabase. Add `?demo` to the address for demo mode.
+- One-time setup: add the GitHub Actions secrets `CLOUDFLARE_API_TOKEN` (from the
+  "Edit Cloudflare Workers" token template) and `CLOUDFLARE_ACCOUNT_ID`.
+
 ## Tests
 
 ```bash
