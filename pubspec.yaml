@@ -1,0 +1,41 @@
+name: storefront_workforce
+description: Workforce management for arena concessions storefronts.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  workforce_core:
+    path: packages/workforce_core
+  flutter_riverpod: ^3.0.0
+  go_router: ^18.0.2
+  supabase_flutter: ^2.10.0
+  intl: any
+  shared_preferences: ^2.5.0
+  image_picker: ^1.2.0
+  geolocator: ^14.0.0
+  timezone: ^0.11.2
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: NotoSans
+      fonts:
+        - asset: assets/fonts/NotoSans.ttf
+    - family: SourceSerif4
+      fonts:
+        - asset: assets/fonts/SourceSerif4-Regular.ttf
+        - asset: assets/fonts/SourceSerif4-Semibold.ttf
+          weight: 600

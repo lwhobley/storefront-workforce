@@ -1,0 +1,15 @@
+# Supabase CLI configuration (local development and function settings).
+project_id = "storefront-workforce"
+
+[functions.pin-login]
+verify_jwt = false
+
+[functions.kiosk-punch]
+verify_jwt = true
+
+[functions.staff-admin]
+verify_jwt = true
+
+# Authenticates managers itself, or a scheduled job by x-cron-secret.
+[functions.event-sync]
+verify_jwt = false
