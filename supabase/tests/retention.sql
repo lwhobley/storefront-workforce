@@ -184,4 +184,38 @@ select pg_temp.expect_error(
   'another venue cannot ask for a deletion here');
 
 select pg_temp.as_owner();
+
+-- ---- 0025: anonymising also clears the audit trail's copies ----------------------
+select pg_temp.as_owner();
+insert into workers (id, venue_id, worker_type, employee_number, first_name, last_name, phone, email, emergency_contact_name, status)
+values ('99999999-0000-0000-0000-000000230003', '00000000-0000-0000-0000-00000023aa01', 'regular', 'E9003',
+        'Quinnella', 'Secretname', '555-0333', 'quinn@example.com', 'Mother Secretname', 'active');
+update workers set phone = '555-0444', preferred_name = 'Quinny' where id = '99999999-0000-0000-0000-000000230003';
+insert into worker_notes (venue_id, worker_id, body)
+values ('00000000-0000-0000-0000-00000023aa01', '99999999-0000-0000-0000-000000230003', 'Quinnella was sent home for stealing');
+insert into data_deletion_requests (id, venue_id, worker_id, requested_by)
+values ('00000000-0000-0000-0000-000000230203', '00000000-0000-0000-0000-00000023aa01', '99999999-0000-0000-0000-000000230003',
+        '00000000-0000-0000-0000-000000002311');
+select pg_temp.expect(
+  (select count(*) from audit_logs where coalesce(before::text, '') || coalesce(after::text, '') ~ 'Quinnella|Secretname|555-0333|555-0444|stealing') >= 3,
+  'before anonymising, the audit log still holds the name, phone and note text');
+select pg_temp.as_user('00000000-0000-0000-0000-000000002312');
+select anonymize_worker('00000000-0000-0000-0000-000000230203', 'Asked in writing');
+select pg_temp.as_owner();
+select pg_temp.expect(
+  (select count(*) from audit_logs where coalesce(before::text, '') || coalesce(after::text, '') || reason
+     ~ 'Quinnella|Secretname|555-0333|555-0444|quinn@example|Quinny|stealing') = 0,
+  'after anonymising, no name, phone, email or note text remains in the audit log');
+select pg_temp.expect(
+  (select count(*) from audit_logs where entity = 'worker_notes' and action = 'worker_notes.delete') = 1
+  and (select count(*) from audit_logs where entity = 'workers' and entity_id = '99999999-0000-0000-0000-000000230003') >= 3,
+  'the audit rows themselves stay (the history of what happened)');
+select pg_temp.expect(
+  (select (after ->> 'audit_rows_redacted')::int >= 3 from audit_logs
+    where entity = 'worker' and action = 'anonymized' and entity_id = '99999999-0000-0000-0000-000000230003'),
+  'the anonymised audit row records that audit rows were redacted');
+select pg_temp.expect(
+  (select emergency_contact_name = '' from workers where id = '99999999-0000-0000-0000-000000230003'),
+  'the emergency contact is cleared too');
+
 rollback;

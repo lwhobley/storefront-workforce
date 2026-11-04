@@ -278,11 +278,13 @@ class ChecklistRun {
   /// Short label for chips: "Opening 5/7".
   String get chipLabel => signedOff ? '$templateName signed off' : '$templateName $doneCount/$total';
 
+  /// The server answers a resent change id with only {id, stored: true} when the person
+  /// can no longer see the run, so every other field may be missing.
   factory ChecklistRun.fromJson(Map<String, dynamic> j) => ChecklistRun(
         id: j['id'] as String,
-        eventId: j['event_id'] as String,
-        storefrontId: j['storefront_id'] as String,
-        templateId: j['template_id'] as String,
+        eventId: (j['event_id'] as String?) ?? '',
+        storefrontId: (j['storefront_id'] as String?) ?? '',
+        templateId: (j['template_id'] as String?) ?? '',
         templateName: (j['template_name'] as String?) ?? '',
         templateKind: ChecklistKind.fromCode(j['template_kind'] as String?),
         status: ChecklistStatus.fromCode(j['status'] as String?),
@@ -565,12 +567,13 @@ class Incident {
     return first.length > 90 ? '${first.substring(0, 87)}...' : first;
   }
 
+  /// May be the bare {id, stored: true} acknowledgement (see [ChecklistRun.fromJson]).
   factory Incident.fromJson(Map<String, dynamic> j) => Incident(
         id: j['id'] as String,
-        venueId: j['venue_id'] as String,
+        venueId: (j['venue_id'] as String?) ?? '',
         kind: IncidentKind.fromCode(j['kind'] as String?),
         severity: IncidentSeverity.fromCode(j['severity'] as String?),
-        occurredAt: _time(j['occurred_at'])!,
+        occurredAt: _time(j['occurred_at']) ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
         description: (j['description'] as String?) ?? '',
         status: IncidentStatus.fromCode(j['status'] as String?),
         eventId: j['event_id'] as String?,

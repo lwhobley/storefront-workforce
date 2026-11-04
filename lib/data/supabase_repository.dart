@@ -48,7 +48,14 @@ abstract class _SupabaseCore implements WorkforceRepository {
 
   Never _fail(Object error) {
     if (error is AppFailure) throw error;
-    if (error is PostgrestException) throw AppFailure(error.message);
+    if (error is PostgrestException) {
+      // WF404: a photo the change names has not finished uploading. Keep the change on
+      // the device and send it again, instead of setting it aside as refused.
+      if (error.code == 'WF404') {
+        throw const AppFailure('A photo is still uploading. Your change is saved on this device.', offline: true);
+      }
+      throw AppFailure(error.message);
+    }
     if (error is FunctionException) {
       final details = error.details;
       final message = details is Map && details['error'] is String ? details['error'] as String : 'The request failed.';

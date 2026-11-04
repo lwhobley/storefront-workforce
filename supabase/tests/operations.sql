@@ -394,4 +394,75 @@ select pg_temp.expect(not has_function_privilege('authenticated', 'public.ensure
   and not has_function_privilege('anon', 'public.record_checklist_item(jsonb)', 'execute'),
   'internal helpers stay closed to the app, and anonymous callers get nothing');
 
+-- ---- 0025: photos must exist, resent ids re-check access, no empty sign-off -------
+select pg_temp.as_user('00000000-0000-0000-0000-000000002111');
+select start_checklist_run('00000000-0000-0000-0000-000000210e01', '00000000-0000-0000-0000-000000210102', pg_temp.tpl('Closing'));
+select pg_temp.as_owner();
+create or replace function pg_temp.run_s2() returns uuid language sql as $$
+  select id from checklist_runs where storefront_id = '00000000-0000-0000-0000-000000210102' and template_id = pg_temp.tpl('Closing');
+$$;
+select pg_temp.as_user('00000000-0000-0000-0000-000000002111');
+select pg_temp.expect_error(format($$select record_checklist_item(pg_temp.change('00000000-0000-0000-0000-0000002100d1', '00000000-0000-0000-0000-000000210102', 'Closing', 'Clean-up checked', true, array['00000000-0000-0000-0000-00000021aa01/%s/never.jpg']))$$, pg_temp.run_s2()),
+  'a photo path nobody uploaded is refused, so a photo item cannot be ticked with it');
+select pg_temp.expect((select not done from checklist_run_items where run_id = pg_temp.run_s2() and label = 'Clean-up checked')
+  and not exists (select 1 from checklist_item_changes where id = '00000000-0000-0000-0000-0000002100d1'),
+  'and nothing was stored');
+do $$ begin
+  perform record_checklist_item(pg_temp.change('00000000-0000-0000-0000-0000002100d1', '00000000-0000-0000-0000-000000210102', 'Closing', 'Clean-up checked', true,
+    array['00000000-0000-0000-0000-00000021aa01/' || pg_temp.run_s2() || '/never.jpg']));
+  raise exception 'FAILED: should have been refused';
+exception when sqlstate 'WF404' then raise notice 'ok - a missing photo is refused with WF404 so the app retries it';
+end $$;
+insert into storage.objects (bucket_id, name) values ('checklist-photos', '00000000-0000-0000-0000-00000021aa01/' || pg_temp.run_s2() || '/real.jpg');
+select pg_temp.expect((record_checklist_item(pg_temp.change('00000000-0000-0000-0000-0000002100d1', '00000000-0000-0000-0000-000000210102', 'Closing', 'Clean-up checked', true,
+  array['00000000-0000-0000-0000-00000021aa01/' || pg_temp.run_s2() || '/real.jpg'])) ->> 'id') = pg_temp.run_s2()::text,
+  'once the photo is uploaded, the same change goes through');
+
+-- Incident photos must exist too.
+select pg_temp.expect_error($$select add_incident_photos('00000000-0000-0000-0000-0000002110b1', array['00000000-0000-0000-0000-00000021aa01/00000000-0000-0000-0000-0000002110b1/ghost.jpg'])$$,
+  'an incident photo that was never uploaded is refused');
+select pg_temp.expect((select cardinality(photo_paths) from incidents where id = '00000000-0000-0000-0000-0000002110b1') = 0,
+  'and not attached');
+
+-- A run with no items cannot be signed off.
+select pg_temp.as_owner();
+insert into checklist_runs (venue_id, event_id, storefront_id, template_id)
+values ('00000000-0000-0000-0000-00000021aa01', '00000000-0000-0000-0000-000000210e01', '00000000-0000-0000-0000-000000210102', pg_temp.tpl('Opening'));
+select pg_temp.as_user('00000000-0000-0000-0000-000000002111');
+select pg_temp.expect_error($$select sign_off_checklist((select id from checklist_runs where storefront_id = '00000000-0000-0000-0000-000000210102' and template_id = pg_temp.tpl('Opening')), '')$$,
+  'a checklist with no items cannot be signed off');
+
+-- Resending an old change id after losing access returns only an acknowledgement.
+select pg_temp.as_user('00000000-0000-0000-0000-000000002112');
+select pg_temp.expect((record_checklist_item(pg_temp.change('00000000-0000-0000-0000-0000002100d2', '00000000-0000-0000-0000-000000210101', 'Opening', 'Stations assigned', true)) ? 'items'),
+  'while the lead has access, a stored id returns the run');
+select pg_temp.expect((record_checklist_item(pg_temp.change('00000000-0000-0000-0000-0000002100d2', '00000000-0000-0000-0000-000000210101', 'Opening', 'Stations assigned', true)) ? 'items'),
+  'resending it still returns the run');
+select add_incident_note(jsonb_build_object('id', '00000000-0000-0000-0000-0000002110f1', 'incident_id', '00000000-0000-0000-0000-0000002110c2', 'body', 'Spoke to both'));
+select pg_temp.as_user('00000000-0000-0000-0000-000000002111');
+select update_incident('00000000-0000-0000-0000-0000002110c2', 'closed', null, 'Secret closing note');
+select pg_temp.as_owner();
+delete from role_assignments where user_id = '00000000-0000-0000-0000-000000002112';
+select pg_temp.as_user('00000000-0000-0000-0000-000000002112');
+select pg_temp.expect((select record_checklist_item(pg_temp.change('00000000-0000-0000-0000-0000002100d2', '00000000-0000-0000-0000-000000210101', 'Opening', 'Stations assigned', true)))
+    = jsonb_build_object('id', '00000000-0000-0000-0000-0000002100d2', 'stored', true),
+  'a lead who lost their role gets only {id, stored} for an old checklist change');
+select pg_temp.expect((select log_incident(jsonb_build_object('id', '00000000-0000-0000-0000-0000002110c2', 'venue_id', '00000000-0000-0000-0000-00000021aa01', 'kind', 'employee', 'description', 'x')))
+    = jsonb_build_object('id', '00000000-0000-0000-0000-0000002110c2', 'stored', true),
+  'and for an old incident report (no closing note leaks)');
+select pg_temp.expect((select add_incident_note(jsonb_build_object('id', '00000000-0000-0000-0000-0000002110f1', 'incident_id', '00000000-0000-0000-0000-0000002110c2', 'body', 'x')))
+    = jsonb_build_object('id', '00000000-0000-0000-0000-0000002110f1', 'stored', true),
+  'and for an old incident note');
+select pg_temp.as_user('00000000-0000-0000-0000-000000002111');
+select pg_temp.expect_error($$select record_checklist_item(pg_temp.change('00000000-0000-0000-0000-0000002100d2', '00000000-0000-0000-0000-000000210101', 'Opening', 'Stations assigned', true))$$,
+  'another person still cannot reuse the id');
+
+-- Audit log: incident free text is not copied in; employee closing notes stay out of reasons.
+select pg_temp.as_owner();
+select pg_temp.expect(not exists (select 1 from audit_logs where entity in ('incidents', 'incident_notes')
+    and (before ?| array['description', 'closing_note', 'body'] or after ?| array['description', 'closing_note', 'body'])),
+  'the audit log holds no incident description, closing note or note body');
+select pg_temp.expect(not exists (select 1 from audit_logs where entity in ('incidents', 'incident_notes') and reason = 'Secret closing note'),
+  'an employee incident''s closing note is not in the audit reason');
+
 rollback;

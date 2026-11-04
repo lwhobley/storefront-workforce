@@ -89,7 +89,7 @@ see it on the board).
 
 ## Backend state (live Supabase project)
 
-- **Migrations applied: 0001–0020.** 0011–0014 (Phase 3) match this repo function for
+- **Migrations applied: 0001–0025.** 0011–0014 (Phase 3) match this repo function for
   function. **0015–0017** (report targets, ratings, do-not-rehire) were applied from
   another working copy whose app code is not on GitHub yet; the SQL was copied into this
   repo from the live project's migration history, and 0017 was checked to match the live
@@ -100,15 +100,30 @@ see it on the board).
   can't be picked up, partners can't read punch GPS or photo paths, a minor's waiver
   needs a guardian, ratings and do-not-rehire flags are audited, failed notifications
   stop after 5 attempts, and one venue's bad setting can't stop other venues' reminders.
-  Every public function on the live project was checked against the tested code after
-  applying. Known gap left on purpose: `events.labor_budget` is still readable by any
-  venue member from the table itself, because the app selects events with `*`; fix by
-  listing columns in the app, then revoking that column.
-- **Two working copies:** whoever pushes the Phase 4 app code must rebase onto `main` and
-  keep these migration numbers. New migrations start at 0021.
-- **Edge functions deployed:** `pin-login`, `kiosk-punch`, `staff-admin`, `event-sync`.
-  Not deployed: `notify-dispatch`. `setup-sql` is a disabled loader (returns 410) and
-  can be deleted.
+- **0021–0023** (checklists and incidents, ratings notes, data retention and deletion)
+  were applied by another working session and are merged here. **0024** (reports) hides
+  `events.labor_budget` and `event_storefronts.labor_budget` from table reads; pay viewers
+  get budgets through `report_labor_budgets()`. Any new column on those two tables needs
+  its own `grant select (column)`, and never `select('*')` on them (use `eventReadColumns`).
+- **0025** fixes a second review: photo proof must be a file that really exists, a resent
+  change id can't return content to someone who lost access, deleting a person also
+  blanks their details in the audit log, ticking items locks the run against a
+  simultaneous sign-off, only people with pay access can set `events.labor_budget`, and
+  the audit log no longer records budget figures. Every function on the live project was
+  checked against the tested code after applying 0018–0025.
+- **Two sessions, one repository:** two Claude sessions have worked on this repository
+  and database at once, which caused migration number clashes. Pull `main` before
+  starting, and take the next number after the highest in `supabase/migrations/`
+  (next is 0026).
+- **Edge functions deployed:** `pin-login`, `kiosk-punch`, `staff-admin`, `event-sync`,
+  `notify-dispatch`. `setup-sql` is a disabled loader (returns 410) and can be deleted.
+  **Push and email do not send yet:** the secrets are not set. Push reads
+  `FIREBASE_PROJECT_ID` (Premium Command's is `venuewranglerenterprise-5b4f9`, not secret)
+  and `FIREBASE_SERVICE_ACCOUNT` (the same service-account JSON file Premium Command uses;
+  Supabase never shows secret values, so it must be entered again in the dashboard).
+  Email needs `RESEND_API_KEY` and `EMAIL_FROM`; the schedule needs `CRON_SECRET`. This app
+  also has to be added as its own app in that Firebase project (its own package name and
+  config files) before the app can register for push.
 - **Applying migrations:** the MCP `apply_migration` tool works for small files. For
   large files, Supabase's Cloudflare firewall blocked a raw SQL request body once; the
   loader worked when the SQL was sent base64-encoded. Record each migration in
