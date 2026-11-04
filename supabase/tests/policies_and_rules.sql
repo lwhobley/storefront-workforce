@@ -312,4 +312,38 @@ select save_npo_payout(jsonb_build_object('event_id', '00000000-0000-0000-0000-0
 select pg_temp.expect((select total from npo_payouts where npo_group_id = '00000000-0000-0000-0000-00000000a902') = 20,
   'an adjustment with a reason is saved');
 
+-- ---- 0019 review fixes ----------------------------------------------------------------
+-- 7. An agency contact sees their temp's shift but not punch rows (GPS, photo paths).
+select pg_temp.as_owner();
+insert into punches (id, venue_id, worker_id, event_id, kind, occurred_at, source, latitude, longitude, photo_path) values
+  ('00000000-0000-0000-0000-00000000f0c3', '00000000-0000-0000-0000-00000000aa01', '00000000-0000-0000-0000-00000000c003',
+   '00000000-0000-0000-0000-0000000e0001', 'clock_in', now(), 'phone', 30.2, -97.7, 'aa01/c003/p.jpg');
+select pg_temp.as_user('00000000-0000-0000-0000-000000000004');
+select pg_temp.expect((select count(*) from shifts) = 1, 'agency contact still sees their worker''s shift');
+select pg_temp.expect((select count(*) from punches) = 0, 'agency contact cannot read their worker''s punches (GPS, photo)');
+select pg_temp.as_user('00000000-0000-0000-0000-000000000001');
+select pg_temp.expect((select count(*) from punches where worker_id = '00000000-0000-0000-0000-00000000c003') = 1,
+  'a manager with view_workers still reads them');
+
+-- 11. Ratings and do-not-rehire flags are audited; only a flag's reason can be changed.
+insert into worker_ratings (venue_id, worker_id, stars, note)
+values ('00000000-0000-0000-0000-00000000aa01', '00000000-0000-0000-0000-00000000c004', 4, 'Fast on the register');
+insert into rehire_flags (venue_id, worker_id, reason)
+values ('00000000-0000-0000-0000-00000000aa01', '00000000-0000-0000-0000-00000000c004', 'Left mid-shift');
+update rehire_flags set reason = 'Left mid-shift twice' where worker_id = '00000000-0000-0000-0000-00000000c004';
+select pg_temp.expect_error($$update rehire_flags set flagged_by = '00000000-0000-0000-0000-000000000003' where worker_id = '00000000-0000-0000-0000-00000000c004'$$,
+  'who flagged a person cannot be rewritten');
+select pg_temp.expect_error($$update rehire_flags set flagged_at = now() - interval '1 year' where worker_id = '00000000-0000-0000-0000-00000000c004'$$,
+  'nor when');
+select pg_temp.expect_error($$update rehire_flags set worker_id = '00000000-0000-0000-0000-00000000c001' where worker_id = '00000000-0000-0000-0000-00000000c004'$$,
+  'nor whom the flag is about');
+delete from rehire_flags where worker_id = '00000000-0000-0000-0000-00000000c004';
+select pg_temp.as_owner();
+select pg_temp.expect((select count(*) from audit_logs where entity = 'worker_ratings' and action = 'worker_ratings.insert'
+  and actor_id = '00000000-0000-0000-0000-000000000001') = 1, 'adding a rating is audited with who did it');
+select pg_temp.expect((select string_agg(action, ',' order by id) from audit_logs where entity = 'rehire_flags')
+  = 'rehire_flags.insert,rehire_flags.update,rehire_flags.delete', 'flagging, editing and clearing a flag are audited');
+select pg_temp.expect((select before ->> 'reason' = 'Left mid-shift' and after ->> 'reason' = 'Left mid-shift twice'
+  from audit_logs where action = 'rehire_flags.update'), 'the audit keeps the old and new reason');
+
 rollback;

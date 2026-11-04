@@ -354,4 +354,82 @@ select pg_temp.expect(assignment_block_reason('00000000-0000-0000-0000-00000014c
 insert into rehire_flags (venue_id, worker_id, reason) values ('00000000-0000-0000-0000-00000014aa01', '00000000-0000-0000-0000-00000014c002', 'No-show twice');
 select pg_temp.expect(assignment_block_reason('00000000-0000-0000-0000-00000014c002', '00000000-0000-0000-0000-000000140e02', 'cashier', gen_random_uuid()) = 'This person is flagged do not rehire.',
   'a do-not-rehire flag still blocks placement');
+
+-- ---- 0019 review fixes ----------------------------------------------------------------
+-- 7. Partners do not read punch rows (GPS, photo paths); the portals give them times.
+select pg_temp.as_user('00000000-0000-0000-0000-000000001415'); -- agency contact
+select pg_temp.expect((select count(*) from punches) = 0, 'an agency contact cannot read punch rows (GPS, photos)');
+select pg_temp.expect((select count(*) from shifts) = 2, 'but still sees their temps'' shifts');
+select pg_temp.as_user('00000000-0000-0000-0000-000000001414'); -- NPO coordinator
+select pg_temp.expect((select count(*) from punches) = 0, 'an NPO coordinator cannot read punch rows');
+select pg_temp.as_user('00000000-0000-0000-0000-000000001417'); -- Eve
+select pg_temp.expect((select count(*) from punches) = 2 and (select bool_and(worker_id = '00000000-0000-0000-0000-00000014c005') from punches),
+  'a person still reads their own punches');
+select pg_temp.as_user('00000000-0000-0000-0000-000000001411');
+select pg_temp.expect((select count(*) from punches where latitude is not null) = 1, 'a manager still reads punches with location');
+
+-- 8. A minor's waiver acknowledgment without a guardian does not count.
+select pg_temp.as_owner();
+insert into onboarding_progress (venue_id, worker_id, step_code, status, data)
+select '00000000-0000-0000-0000-00000014aa01', '00000000-0000-0000-0000-00000014c006', 'waiver', 'complete',
+       jsonb_build_object('acknowledgments', jsonb_build_array(jsonb_build_object(
+         'document_id', d.id, 'title', d.title, 'version', d.version, 'typed_name', 'Fay Lee', 'adult_confirmed', true, 'at', now())))
+  from onboarding_documents d where d.step_code = 'waiver' and d.venue_id = '00000000-0000-0000-0000-00000014aa01';
+select pg_temp.expect((pg_temp.step(onboarding_state('00000000-0000-0000-0000-00000014c006', true), 'waiver') ->> 'status') = 'complete',
+  'an adult''s waiver without a guardian counts');
+update workers set date_of_birth = current_date - interval '16 years' where id = '00000000-0000-0000-0000-00000014c006';
+select pg_temp.expect((pg_temp.step(onboarding_state('00000000-0000-0000-0000-00000014c006', true), 'waiver') ->> 'status') <> 'complete'
+  and (pg_temp.step(onboarding_state('00000000-0000-0000-0000-00000014c006', true), 'waiver') ->> 'guardian_required')::boolean,
+  'once the birth date shows a minor, a waiver signed without a guardian no longer counts');
+update onboarding_progress set data = jsonb_set(data, '{acknowledgments,0,guardian_name}', '"Gina Lee"')
+ where worker_id = '00000000-0000-0000-0000-00000014c006' and step_code = 'waiver';
+select pg_temp.expect((pg_temp.step(onboarding_state('00000000-0000-0000-0000-00000014c006', true), 'waiver') ->> 'status') = 'complete',
+  'with a guardian''s name it counts');
+
+-- 9. Managers cannot complete document or card steps, or steps waiting for review.
+select pg_temp.as_user('00000000-0000-0000-0000-000000001417'); -- Eve sends her birth date
+select submit_onboarding_step('age_confirmation', '{"date_of_birth": "2010-03-03"}') is null;
+select pg_temp.as_user('00000000-0000-0000-0000-000000001411');
+select pg_temp.expect_error($$select complete_onboarding_step('00000000-0000-0000-0000-00000014c001', 'policies')$$,
+  'a manager cannot mark a document step done for someone');
+select pg_temp.expect_error($$select complete_onboarding_step('00000000-0000-0000-0000-00000014c002', 'certifications')$$,
+  'a manager cannot mark a card step done without cards');
+select pg_temp.expect_error($$select complete_onboarding_step('00000000-0000-0000-0000-00000014c005', 'age_confirmation')$$,
+  'a step waiting for review is approved or sent back, not completed');
+select pg_temp.expect((pg_temp.step(complete_onboarding_step('00000000-0000-0000-0000-00000014c002', 'application', '{"note": "On paper"}'), 'application') ->> 'status') = 'complete',
+  'a form step can still be recorded as done on paper');
+
+-- 10. Sending a card again replaces the earlier unverified card.
+select pg_temp.as_user('00000000-0000-0000-0000-000000001413'); -- Ben
+select submit_onboarding_step('certifications', '{"certs": [{"cert_type_code": "food_handler", "file_path": "00000000-0000-0000-0000-00000014aa01/00000000-0000-0000-0000-00000014c002/fh1.jpg"}]}',
+  array['00000000-0000-0000-0000-00000014aa01/00000000-0000-0000-0000-00000014c002/fh1.jpg']) is null;
+select submit_onboarding_step('certifications', '{"certs": [{"cert_type_code": "food_handler", "file_path": "00000000-0000-0000-0000-00000014aa01/00000000-0000-0000-0000-00000014c002/fh2.jpg"}]}',
+  array['00000000-0000-0000-0000-00000014aa01/00000000-0000-0000-0000-00000014c002/fh2.jpg']) is null;
+select pg_temp.as_owner();
+select pg_temp.expect((select count(*) from worker_certifications where worker_id = '00000000-0000-0000-0000-00000014c002') = 1
+  and (select document_path from worker_certifications where worker_id = '00000000-0000-0000-0000-00000014c002') like '%/fh2.jpg',
+  'sending a card again replaces the unverified one');
+select pg_temp.as_user('00000000-0000-0000-0000-000000001411');
+select review_onboarding_step('00000000-0000-0000-0000-00000014c002', 'certifications', true) is null;
+select pg_temp.as_user('00000000-0000-0000-0000-000000001413');
+select submit_onboarding_step('certifications', '{"certs": [{"cert_type_code": "food_handler", "file_path": "00000000-0000-0000-0000-00000014aa01/00000000-0000-0000-0000-00000014c002/fh3.jpg"}]}',
+  array['00000000-0000-0000-0000-00000014aa01/00000000-0000-0000-0000-00000014c002/fh3.jpg']) is null;
+select pg_temp.as_owner();
+select pg_temp.expect((select count(*) from worker_certifications where worker_id = '00000000-0000-0000-0000-00000014c002') = 2
+  and (select count(*) from worker_certifications where worker_id = '00000000-0000-0000-0000-00000014c002' and verified_by is not null) = 1,
+  'a verified card stays when a new one is sent');
+
+-- 12. Assistant managers (view_workers) can open onboarding uploads at their venue.
+insert into auth.users (id) values ('00000000-0000-0000-0000-000000001418');
+insert into venue_memberships (venue_id, user_id) values ('00000000-0000-0000-0000-00000014aa01', '00000000-0000-0000-0000-000000001418');
+insert into role_assignments (venue_id, user_id, role_code) values
+  ('00000000-0000-0000-0000-00000014aa01', '00000000-0000-0000-0000-000000001418', 'assistant_manager');
+insert into storage.objects (bucket_id, name) values ('onboarding-docs', '00000000-0000-0000-0000-00000014bb01/00000000-0000-0000-0000-00000014c0b1/x.jpg');
+select pg_temp.as_user('00000000-0000-0000-0000-000000001418');
+select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'onboarding-docs') = 2
+  and (select bool_and(name like '00000000-0000-0000-0000-00000014aa01/%') from storage.objects where bucket_id = 'onboarding-docs'),
+  'an assistant manager opens the cards they see listed, at their venue only');
+select pg_temp.as_user('00000000-0000-0000-0000-000000001413');
+select pg_temp.expect((select count(*) from storage.objects where bucket_id = 'onboarding-docs') = 1, 'an employee still opens only their own');
+
 rollback;

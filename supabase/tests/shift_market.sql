@@ -350,4 +350,149 @@ select pg_temp.expect(not has_function_privilege('anon', 'public.request_pickup(
   and has_function_privilege('authenticated', 'public.open_shifts_for_me()', 'execute'),
   'anonymous callers get nothing; internal helpers are not exposed');
 
+-- ---- 0019 review fixes --------------------------------------------------------
+select pg_temp.as_owner();
+update venues set settings = '{}' where id = '00000000-0000-0012-0000-00000000aa01';
+create or replace function pg_temp.error_of(sql text) returns text language plpgsql as $$
+begin
+  execute sql;
+  return null;
+exception when others then
+  return sqlerrm;
+end $$;
+
+-- 1. Coworker privacy. Cara is flagged do-not-rehire.
+insert into rehire_flags (venue_id, worker_id, reason)
+values ('00000000-0000-0012-0000-00000000aa01', '00000000-0000-0012-0000-00000000c003', 'No-show twice');
+select pg_temp.as_user('00000000-0000-0012-0000-000000000003'); -- Ana holds the E2 cashier shift
+select pg_temp.expect(pg_temp.error_of(format('select offer_swap(%L, %L)', :'e2_f1_cash', '00000000-0000-0012-0000-00000000c003'))
+  = 'This coworker can''t take this shift.', 'offering a shift to a blocked coworker gives no reason about them');
+select pg_temp.as_user('00000000-0000-0012-0000-000000000005'); -- Cara
+select pg_temp.expect(jsonb_array_length(open_shifts_for_me()) > 0
+  and (select bool_and(x ->> 'blocked' = 'You can''t pick up shifts right now. Talk to a manager.') from jsonb_array_elements(open_shifts_for_me()) x),
+  'a flagged employee sees a neutral reason on open shifts, not the flag');
+select pg_temp.expect(pg_temp.error_of(format('select request_pickup(%L)', :'e1_f2_cash'))
+  = 'You can''t pick up shifts right now. Talk to a manager.', 'a flagged employee''s pickup is refused with the neutral reason');
+select pg_temp.as_user('00000000-0000-0012-0000-000000000001');
+select pg_temp.expect(pg_temp.error_of(format('select assign_shift(%L, %L)', :'e1_f2_cash', '00000000-0000-0012-0000-00000000c003'))
+  = 'This person is flagged do not rehire.', 'managers still get the detailed reason');
+select pg_temp.as_user('00000000-0000-0012-0000-000000000003'); -- Ana offers E2 to Dev, then Dev is flagged
+select offer_swap(:'e2_f1_cash', '00000000-0000-0012-0000-00000000c004');
+select pg_temp.as_owner();
+insert into rehire_flags (venue_id, worker_id, reason)
+values ('00000000-0000-0012-0000-00000000aa01', '00000000-0000-0012-0000-00000000c004', 'Left mid-shift');
+select pg_temp.as_user('00000000-0000-0012-0000-000000000006'); -- Dev
+select pg_temp.expect(pg_temp.error_of(format('select respond_swap((select id from shift_requests where shift_id = %L and status = ''offered''), true)', :'e2_f1_cash'))
+  = 'You can''t pick up shifts right now. Talk to a manager.', 'accepting a swap while flagged gives the neutral reason');
+select pg_temp.as_owner();
+delete from rehire_flags where worker_id = '00000000-0000-0012-0000-00000000c004';
+select pg_temp.as_user('00000000-0000-0012-0000-000000000003');
+select cancel_shift_request((select id from shift_requests where shift_id = :'e2_f1_cash' and status = 'offered'));
+select pg_temp.as_owner();
+select pg_temp.expect((select count(*) from notifications where title like 'Swap request withdrawn%') = 0,
+  'withdrawing an offer the coworker never accepted does not page the schedulers');
+
+-- 2. A manager at two venues sees both venues' requests.
+insert into auth.users (id) values ('00000000-0000-0012-0000-000000000009');
+insert into venue_memberships (venue_id, user_id) values
+  ('00000000-0000-0012-0000-00000000aa01', '00000000-0000-0012-0000-000000000009'),
+  ('00000000-0000-0012-0000-00000000bb01', '00000000-0000-0012-0000-000000000009');
+insert into role_assignments (venue_id, user_id, role_code, scope_type, scope_id) values
+  ('00000000-0000-0012-0000-00000000aa01', '00000000-0000-0012-0000-000000000009', 'concessions_manager', 'venue', null),
+  ('00000000-0000-0012-0000-00000000bb01', '00000000-0000-0012-0000-000000000009', 'concessions_manager', 'venue', null);
+select pg_temp.as_user('00000000-0000-0012-0000-000000000004'); -- Ben asks for the E1 F2 cashier shift
+select request_pickup(:'e1_f2_cash');
+select pg_temp.as_user('00000000-0000-0012-0000-000000000008'); -- Zed at venue B
+select request_pickup(:'eb_cash');
+select pg_temp.as_user('00000000-0000-0012-0000-000000000009');
+select pg_temp.expect((select count(distinct x ->> 'venue_id') from jsonb_array_elements(review_shift_requests()) x) = 2,
+  'a manager at two venues sees requests from both');
+select pg_temp.as_user('00000000-0000-0012-0000-000000000007');
+select pg_temp.expect((select bool_and(x ->> 'venue_id' = '00000000-0000-0012-0000-00000000bb01') and count(*) = 1
+  from jsonb_array_elements(review_shift_requests()) x), 'a one-venue manager still sees only their venue');
+
+-- 4. A storefront closed for the event: no pickups.
+select pg_temp.as_user('00000000-0000-0012-0000-000000000001');
+select set_event_storefronts('00000000-0000-0012-0000-0000000e0001', array['00000000-0000-0012-0000-000000000f01'::uuid]);
+select pg_temp.as_user('00000000-0000-0012-0000-000000000006'); -- Dev
+select pg_temp.expect((select count(*) from jsonb_array_elements(open_shifts_for_me()) x
+  where x -> 'shift' ->> 'storefront_id' = '00000000-0000-0012-0000-000000000f02' and x -> 'event' ->> 'id' = '00000000-0000-0012-0000-0000000e0001') = 0
+  and (select count(*) from jsonb_array_elements(open_shifts_for_me()) x
+  where x -> 'shift' ->> 'storefront_id' = '00000000-0000-0012-0000-000000000f01' and x -> 'event' ->> 'id' = '00000000-0000-0012-0000-0000000e0001') > 0,
+  'positions at a closed storefront are not listed as open shifts');
+select pg_temp.expect_error(format('select request_pickup(%L)', :'e1_f2_cash'), 'a position at a closed storefront cannot be picked up');
+select pg_temp.as_user('00000000-0000-0012-0000-000000000001');
+select pg_temp.expect(pg_temp.error_of(format('select decide_shift_request((select id from shift_requests where shift_id = %L and status = ''pending''), true)', :'e1_f2_cash'))
+  like 'This storefront is closed%', 'a pickup at a closed storefront cannot be approved');
+
+-- 6. Withdrawing a request waiting for a manager tells the schedulers.
+select pg_temp.as_user('00000000-0000-0012-0000-000000000004'); -- Ben
+select cancel_shift_request((select id from shift_requests where shift_id = :'e1_f2_cash' and status = 'pending'));
+select pg_temp.as_owner();
+select pg_temp.expect((select count(*) from notifications where user_id = '00000000-0000-0012-0000-000000000001'
+  and title = 'Pickup request withdrawn: Ben Young') = 1, 'the manager hears a pending request was withdrawn');
+select pg_temp.expect((select count(*) from notifications where user_id = '00000000-0000-0012-0000-000000000002'
+  and title like '%withdrawn%') = 0, 'a lead of another storefront does not');
+
+-- 6. Approving a pickup closes a stale swap with messages that fit it.
+select pg_temp.as_user('00000000-0000-0012-0000-000000000001');
+select assign_shift(:'e1_f1_cash', '00000000-0000-0012-0000-00000000c002'); -- Ben
+select pg_temp.as_user('00000000-0000-0012-0000-000000000004');
+select offer_swap(:'e1_f1_cash', '00000000-0000-0012-0000-00000000c001', 'Can you take it?'); -- to Ana
+select pg_temp.as_user('00000000-0000-0012-0000-000000000001');
+select unassign_shift(:'e1_f1_cash', 'Moved to the kitchen');
+select pg_temp.as_user('00000000-0000-0012-0000-000000000006'); -- Dev
+select request_pickup(:'e1_f1_cash');
+select pg_temp.as_user('00000000-0000-0012-0000-000000000003'); -- Ana
+select request_pickup(:'e1_f1_cash');
+select pg_temp.as_owner();
+select id as dev_x_pickup from shift_requests where shift_id = :'e1_f1_cash' and status = 'pending'
+  and requester_worker_id = '00000000-0000-0012-0000-00000000c004' \gset
+select count(*) as n_before from notifications \gset
+select pg_temp.as_user('00000000-0000-0012-0000-000000000001');
+select decide_shift_request(:'dev_x_pickup', true);
+select pg_temp.as_owner();
+select pg_temp.expect((select count(*) from shift_requests where shift_id = :'e1_f1_cash' and status = 'expired'
+  and requester_worker_id in ('00000000-0000-0012-0000-00000000c001', '00000000-0000-0012-0000-00000000c002')
+  and created_at = now()) = 2, 'the other pickup and the stale swap close');
+select pg_temp.expect((select string_agg(title, ',' order by title) from notifications
+  where user_id = '00000000-0000-0012-0000-000000000003' and title in ('Shift filled', 'Shift offer closed')) = 'Shift filled,Shift offer closed',
+  'Ana hears her pickup was filled and the offer to her closed');
+select pg_temp.expect((select string_agg(title, ',') from notifications
+  where user_id = '00000000-0000-0012-0000-000000000004' and kind = 'request_decided') = 'Swap closed',
+  'Ben (the swap requester) is told his swap closed, not that a shift was filled');
+
+-- 6. An automatic pickup closes other pending pickups on that position.
+select id as e3_open from shifts where event_id = '00000000-0000-0012-0000-0000000e0003' and status = 'open'
+  and storefront_id = '00000000-0000-0012-0000-000000000f01' and job_role_code = 'cashier' limit 1 \gset
+select pg_temp.as_user('00000000-0000-0012-0000-000000000004'); -- Ben asks while approval is on
+select pg_temp.expect((request_pickup(:'e3_open')).status = 'pending', 'a pickup waits for a manager');
+select pg_temp.as_owner();
+update venues set settings = '{"self_service": {"pickups_need_approval": false}}' where id = '00000000-0000-0012-0000-00000000aa01';
+select pg_temp.as_user('00000000-0000-0012-0000-000000000003'); -- Ana takes it at once
+select pg_temp.expect((request_pickup(:'e3_open')).status = 'approved', 'with approval off, another pickup is approved at once');
+select pg_temp.as_owner();
+select pg_temp.expect((select status from shift_requests where shift_id = :'e3_open' and requester_worker_id = '00000000-0000-0012-0000-00000000c002') = 'expired'
+  and (select count(*) from notifications where user_id = '00000000-0000-0012-0000-000000000004' and title = 'Shift filled') = 1,
+  'the earlier pending pickup closes and its requester is told');
+
+-- 5. No labor budgets in what employees get.
+update events set labor_budget = 98765 where venue_id = '00000000-0000-0012-0000-00000000aa01';
+update event_storefronts set labor_budget = 43210 where venue_id = '00000000-0000-0012-0000-00000000aa01';
+select pg_temp.as_user('00000000-0000-0012-0000-000000000004'); -- Ben
+select pg_temp.expect(jsonb_array_length(open_shifts_for_me()) > 0 and position('labor_budget' in open_shifts_for_me()::text) = 0
+  and position('98765' in open_shifts_for_me()::text) = 0, 'open shifts carry no labor budget');
+select pg_temp.expect(jsonb_array_length(my_shift_requests()) > 0 and position('labor_budget' in my_shift_requests()::text) = 0,
+  'my requests carry no labor budget');
+select pg_temp.expect(jsonb_array_length(my_availability() -> 'events') > 0 and position('labor_budget' in my_availability()::text) = 0,
+  'my availability carries no labor budget');
+select pg_temp.as_user('00000000-0000-0012-0000-000000000001');
+select pg_temp.expect(position('98765' in review_shift_requests(true)::text) = 0, 'nor does the request queue');
+
+select pg_temp.as_owner();
+select pg_temp.expect(not has_function_privilege('authenticated', 'public.self_block_reason(uuid, uuid, text, uuid)', 'execute')
+  and not has_function_privilege('authenticated', 'public.close_other_shift_requests(uuid, uuid)', 'execute')
+  and not has_function_privilege('authenticated', 'public.shift_storefront_open(uuid)', 'execute'),
+  'the 0019 helpers are not exposed');
+
 rollback;

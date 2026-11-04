@@ -453,8 +453,8 @@ mixin _DemoShiftMarket on _DemoCore implements ShiftMarketRepository {
         final t = _workers[toWorkerId];
         if (t == null || t.id == w) throw const AppFailure('Choose a coworker');
         if (!t.jobRoles.contains(s.jobRoleCode)) throw const AppFailure('This coworker is not trained for this role');
-        final block = _blockReason(t, _events[s.eventId]!, s.jobRoleCode, s.id);
-        if (block != null) throw AppFailure(block);
+        // Like the server: never say why a coworker can't take it.
+        if (_blockReason(t, _events[s.eventId]!, s.jobRoleCode, s.id) != null) throw const AppFailure("This coworker can't take this shift.");
         if (_smHasOpen(s.id, w)) throw const AppFailure('You already have a request open for this shift');
         final q = _SmRequest(
           id: _id(),
