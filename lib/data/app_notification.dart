@@ -25,6 +25,21 @@ class AppNotification {
 
   bool get isRead => readAt != null;
 
+  /// Messages and announcements have their own tabs in the inbox.
+  bool get isMessage => kind == 'message';
+  bool get isAnnouncement => kind == 'announcement';
+
+  AppNotification copyWith({DateTime? readAt}) => AppNotification(
+        id: id,
+        kind: kind,
+        title: title,
+        createdAt: createdAt,
+        body: body,
+        link: link,
+        readAt: readAt ?? this.readAt,
+        data: data,
+      );
+
   factory AppNotification.fromJson(Map<String, dynamic> j) => AppNotification(
         id: j['id'] as String,
         kind: j['kind'] as String,

@@ -7,7 +7,9 @@ import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/time/venue_time.dart';
 import '../../core/widgets/common.dart';
+import '../../data/comms_repository.dart';
 import '../../data/models.dart';
+import '../comms/compose.dart';
 import '../schedule/schedule_actions.dart';
 import 'live_model.dart';
 
@@ -59,6 +61,12 @@ class StorefrontPanel extends ConsumerWidget {
         g.permissions.contains(Perm.manageSchedule) &&
         (g.scopeType == 'venue' || (g.scopeType == 'storefront' && g.scopeId == storefrontId) || (g.scopeType == 'level' && g.scopeId == sf.levelId)));
     final time = DateFormat('h:mm a');
+    // Managers and leads whose scope covers this storefront can message its crew; a
+    // lead (not venue-wide) also gets a one-tap help alert to the managers.
+    final canMessage = session.grants.any((g) =>
+        (g.permissions.contains(Perm.viewLive) || g.permissions.contains(Perm.manageSchedule)) &&
+        (g.scopeType == 'venue' || (g.scopeType == 'storefront' && g.scopeId == storefrontId) || (g.scopeType == 'level' && g.scopeId == sf.levelId)));
+    final isLead = canMessage && !isVenueWideSender(session);
 
     // Leads first, then by role, then problems first.
     cards.sort((a, b) {
@@ -109,6 +117,32 @@ class StorefrontPanel extends ConsumerWidget {
                     if (summary.released > 0) StatusTag('${summary.released} sent home', Tone.idle),
                   ],
                 ),
+              if (canMessage) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => showComposeSheet(
+                        context,
+                        audience: MessageAudience.storefront,
+                        targetId: storefrontId,
+                        eventId: eventId,
+                        title: 'Message ${sf.name}',
+                      ),
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      label: Text(isLead ? 'Message my team' : 'Message this storefront'),
+                    ),
+                    if (isLead)
+                      FilledButton.tonalIcon(
+                        onPressed: () => showHelpRequest(context, ref, sf),
+                        icon: const Icon(Icons.campaign_outlined),
+                        label: const Text('Request help'),
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

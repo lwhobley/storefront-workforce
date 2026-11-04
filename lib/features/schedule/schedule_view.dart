@@ -8,6 +8,8 @@ import '../../core/theme/app_theme.dart';
 import '../../core/time/venue_time.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
+import '../../data/shift_market_repository.dart';
+import '../shift_market/market_providers.dart';
 import 'schedule_actions.dart';
 
 /// Builds the event's schedule: which storefronts open, how many people each needs by
@@ -262,6 +264,8 @@ class _StorefrontTile extends ConsumerWidget {
     final tone = filled >= needed ? Tone.good : filled >= needed * 0.8 ? Tone.warn : Tone.bad;
     final rules = venue.rules;
     final time = DateFormat('h:mm a');
+    // Open pickup, drop, and swap requests, so the builder shows what staff asked for.
+    final requests = canSchedule ? (ref.watch(reviewRequestsProvider(false)).value ?? const <ShiftRequest>[]) : const <ShiftRequest>[];
 
     return ExpansionTile(
       tilePadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
@@ -312,11 +316,12 @@ class _StorefrontTile extends ConsumerWidget {
               dense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
               leading: Icon(w == null ? Icons.radio_button_unchecked : Icons.check_circle, color: w == null ? AppColors.bad : AppColors.good),
-              title: Row(children: [
-                Flexible(child: Text(w?.displayName ?? 'Open', overflow: TextOverflow.ellipsis)),
-                if (w != null && w.type != WorkerType.regular) ...[const SizedBox(width: 6), StatusTag(workerTypeLabel(w.type), Tone.info)],
-                if (minor) ...[const SizedBox(width: 4), StatusTag('Minor ${bw!.ageOnEvent}', Tone.warn)],
-                if (s.status == ShiftStatus.released) ...[const SizedBox(width: 4), const StatusTag('Sent home', Tone.idle)],
+              title: Wrap(spacing: 4, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                Padding(padding: const EdgeInsets.only(right: 2), child: Text(w?.displayName ?? 'Open')),
+                if (w != null && w.type != WorkerType.regular) StatusTag(workerTypeLabel(w.type), Tone.info),
+                if (minor) StatusTag('Minor ${bw!.ageOnEvent}', Tone.warn),
+                if (s.status == ShiftStatus.released) const StatusTag('Sent home', Tone.idle),
+                ?_requestTag(requests, s),
               ]),
               subtitle: Text('${venue.roleName(s.jobRoleCode)} · call ${time.format(atVenue(s.callTime, board.timeZone))}'),
               trailing: !canSchedule
@@ -336,6 +341,15 @@ class _StorefrontTile extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// "Drop requested", "Swap pending", or "2 pickup requests" for a position.
+Widget? _requestTag(List<ShiftRequest> requests, Shift s) {
+  final mine = [for (final r in requests) if (r.shift.id == s.id && r.status == ShiftRequestStatus.pending) r];
+  if (mine.isEmpty) return null;
+  if (mine.any((r) => r.kind == ShiftRequestKind.drop)) return const StatusTag('Drop requested', Tone.warn, icon: Icons.event_busy);
+  if (mine.any((r) => r.kind == ShiftRequestKind.swap)) return const StatusTag('Swap pending', Tone.info, icon: Icons.swap_horiz);
+  return StatusTag(mine.length == 1 ? '1 pickup request' : '${mine.length} pickup requests', Tone.info, icon: Icons.add_task);
 }
 
 class _NeedStepper extends StatelessWidget {

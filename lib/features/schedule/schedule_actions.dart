@@ -6,7 +6,9 @@ import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
+import '../../data/shift_market_repository.dart';
 import '../../data/workforce_repository.dart';
+import '../shift_market/request_checks.dart';
 import 'assignment_checks.dart';
 
 String workerTypeLabel(WorkerType t) => switch (t) {
@@ -57,7 +59,17 @@ class _AssignSheet extends ConsumerStatefulWidget {
 }
 
 class _AssignSheetState extends ConsumerState<_AssignSheet> {
-  late final Future<List<BoardWorker>> _candidates = ref.read(repositoryProvider).candidates(widget.board.event.id, widget.role.code);
+  late final Future<List<MarketCandidate>> _candidates = _load();
+
+  /// Candidates with what each said about the event (available, unavailable, blackout).
+  Future<List<MarketCandidate>> _load() async {
+    final repo = ref.read(repositoryProvider);
+    if (repo is ShiftMarketRepository) {
+      return (repo as ShiftMarketRepository).candidatesWithAvailability(widget.board.event.id, widget.role.code);
+    }
+    return [for (final c in await repo.candidates(widget.board.event.id, widget.role.code)) MarketCandidate(worker: c)];
+  }
+
   String _query = '';
   WorkerType? _type;
   bool _hideBlocked = true;
@@ -118,13 +130,14 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
         ),
         const SizedBox(height: 8),
         Expanded(
-          child: FutureBuilder<List<BoardWorker>>(
+          child: FutureBuilder<List<MarketCandidate>>(
             future: _candidates,
             builder: (context, snap) {
               if (snap.hasError) return ErrorNote(snap.error!);
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-              final rows = <(BoardWorker, AssignmentCheck)>[];
-              for (final c in snap.data!) {
+              final rows = <(BoardWorker, AssignmentCheck, CandidateAvailability)>[];
+              for (final m in sortByAvailability(snap.data!)) {
+                final c = m.worker;
                 if (_type != null && c.worker.type != _type) continue;
                 if (_query.isNotEmpty &&
                     !c.worker.displayName.toLowerCase().contains(_query) &&
@@ -141,16 +154,22 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
                   certName: widget.venue.certName,
                 );
                 if (_hideBlocked && check.blocks.isNotEmpty) continue;
-                rows.add((c, check));
+                rows.add((c, check, m.availability));
               }
-              // Clean candidates first, then those with warnings.
-              rows.sort((a, b) => (a.$2.blocks.length * 10 + a.$2.warnings.length).compareTo(b.$2.blocks.length * 10 + b.$2.warnings.length));
+              // Blocked people last; then who said they can work, no answer, said they
+              // cannot, blackout; then clean candidates before those with warnings.
+              rows.sort((a, b) {
+                final blocked = (a.$2.blocks.isEmpty ? 0 : 1).compareTo(b.$2.blocks.isEmpty ? 0 : 1);
+                if (blocked != 0) return blocked;
+                final said = a.$3.rank.compareTo(b.$3.rank);
+                return said != 0 ? said : a.$2.warnings.length.compareTo(b.$2.warnings.length);
+              });
               if (rows.isEmpty) return const EmptyNote('No one available. Turn off "Hide blocked" to see why.');
               return ListView.separated(
                 itemCount: rows.length,
                 separatorBuilder: (_, _) => const Divider(indent: AppSpace.screen),
                 itemBuilder: (context, i) {
-                  final (c, check) = rows[i];
+                  final (c, check, said) = rows[i];
                   final w = c.worker;
                   final org = w.type == WorkerType.temp
                       ? widget.venue.agencyName(w.agencyId)
@@ -160,16 +179,21 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
                   return ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
                     enabled: check.blocks.isEmpty,
-                    title: Row(
+                    // Wraps on phones so the tags never push past the Assign button.
+                    title: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Flexible(child: Text(w.displayName, overflow: TextOverflow.ellipsis)),
-                        const SizedBox(width: 6),
+                        Padding(padding: const EdgeInsets.only(right: 2), child: Text(w.displayName)),
                         StatusTag(workerTypeLabel(w.type), w.type == WorkerType.regular ? Tone.idle : Tone.info),
-                        if (c.isMinor(rules.minors.adultAge)) ...[const SizedBox(width: 4), StatusTag('Minor ${c.ageOnEvent}', Tone.warn)],
+                        if (c.isMinor(rules.minors.adultAge)) StatusTag('Minor ${c.ageOnEvent}', Tone.warn),
+                        ?_availabilityTag(said),
                       ],
                     ),
                     subtitle: Text([
                       '${w.employeeNumber}${org.isEmpty ? '' : ' · $org'}',
+                      if (said.note.isNotEmpty) 'Said: “${said.note}”',
                       for (final b in check.blocks) '⛔ ${b.message}',
                       for (final wn in check.warnings) '⚠ ${wn.message}',
                     ].join('\n')),
@@ -186,6 +210,16 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
       ],
     );
   }
+}
+
+/// What the person said about this event, as a tag (nothing when they did not answer).
+Widget? _availabilityTag(CandidateAvailability a) {
+  if (a.blackout) return const StatusTag('Blackout', Tone.bad, icon: Icons.event_busy);
+  return switch (a.status) {
+    AvailabilityStatus.available => const StatusTag('Available', Tone.good, icon: Icons.check),
+    AvailabilityStatus.unavailable => const StatusTag('Said unavailable', Tone.bad, icon: Icons.close),
+    null => null,
+  };
 }
 
 /// Moves a person to another storefront mid-event. The reason is required and logged.

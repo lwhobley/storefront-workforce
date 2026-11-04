@@ -13,3 +13,7 @@ verify_jwt = true
 # Authenticates managers itself, or a scheduled job by x-cron-secret.
 [functions.event-sync]
 verify_jwt = false
+
+# Sends push and email for queued notifications; called by a scheduled job with x-cron-secret.
+[functions.notify-dispatch]
+verify_jwt = false
