@@ -169,4 +169,32 @@ select pg_temp.expect((select fill_green from report_targets where venue_id = '0
 select pg_temp.as_user('00000000-0000-0000-0000-000000002313');
 select pg_temp.expect(not exists (select 1 from report_targets), 'an employee sees no targets');
 
+-- ---- 0025: labor budgets need view_pay to write, and stay out of the audit log -------
+select pg_temp.as_user('00000000-0000-0000-0000-000000002312');
+select pg_temp.expect_error($$update events set labor_budget = 9999 where id = '00000000-0000-0000-0000-000000230e02'$$,
+  'a manager without view_pay cannot set an event budget');
+select pg_temp.expect_error($$update events set labor_budget = 1 where id = '00000000-0000-0000-0000-000000230e01'$$,
+  'nor change an existing one');
+update events set name = 'August Game (renamed)' where id = '00000000-0000-0000-0000-000000230e02';
+select pg_temp.expect((select name from events where id = '00000000-0000-0000-0000-000000230e02') = 'August Game (renamed)',
+  'but still edits the event when the budget is untouched');
+select pg_temp.expect_error($$insert into events (venue_id, name, event_type_code, start_time, doors_time, call_time, end_time, labor_budget)
+  values ('00000000-0000-0000-0000-00000023aa01', 'Sneaky', 'hockey', now(), now(), now(), now(), 5)$$,
+  'a new event cannot be created with a budget by someone without view_pay');
+select pg_temp.as_user('00000000-0000-0000-0000-000000002311');
+update events set labor_budget = 5100 where id = '00000000-0000-0000-0000-000000230e01';
+select pg_temp.as_owner();
+select pg_temp.expect((select labor_budget from events where id = '00000000-0000-0000-0000-000000230e01') = 5100,
+  'someone with view_pay sets the budget');
+update events set labor_budget = 4700 where id = '00000000-0000-0000-0000-000000230e01';
+select pg_temp.expect((select labor_budget from events where id = '00000000-0000-0000-0000-000000230e01') = 4700,
+  'internal (no signed-in user) writes are allowed');
+update event_storefronts set labor_budget = 1300.25 where event_id = '00000000-0000-0000-0000-000000230e01';
+select pg_temp.expect(not exists (select 1 from audit_logs where entity in ('events', 'event_storefronts')
+    and (before ? 'labor_budget' or after ? 'labor_budget')),
+  'the audit log holds no labor_budget for events or event storefronts');
+select pg_temp.expect(exists (select 1 from audit_logs where entity = 'events' and action = 'events.update'
+    and after -> 'redacted_fields' = '["labor_budget"]'::jsonb),
+  'a budget change is still logged, without the figure');
+
 rollback;
