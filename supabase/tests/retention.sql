@@ -36,11 +36,11 @@ values
    'Sam', 'Cole', '555-0200', 'sam@example.com', date '1990-01-01', 'active');
 
 -- Two punches with photos: one old enough to clear, one recent.
-insert into punches (id, venue_id, worker_id, kind, occurred_at, photo_path) values
+insert into punches (id, venue_id, worker_id, kind, occurred_at, source, photo_path) values
   ('00000000-0000-0000-0000-000000230101', '00000000-0000-0000-0000-00000023aa01', '00000000-0000-0000-0000-000000230001',
-   'clock_in', now() - interval '20 months', 'photos/old.jpg'),
+   'clock_in', now() - interval '20 months', 'phone', 'photos/old.jpg'),
   ('00000000-0000-0000-0000-000000230102', '00000000-0000-0000-0000-00000023aa01', '00000000-0000-0000-0000-000000230001',
-   'clock_in', now() - interval '2 months', 'photos/recent.jpg');
+   'clock_in', now() - interval '2 months', 'phone', 'photos/recent.jpg');
 
 -- ---- Helpers ---------------------------------------------------------------
 create or replace function pg_temp.as_user(p uuid) returns void language sql as $$
@@ -83,10 +83,16 @@ select pg_temp.expect_error(
   $$update retention_policies set time_records_months = 12 where venue_id = '00000000-0000-0000-0000-00000023aa01'$$,
   'wage and hour records cannot be kept less than two years');
 
+-- A manager without manage_settings may read the settings but not change them. Row-level
+-- security filters the row out of the update, so nothing changes and nothing is raised.
 select pg_temp.as_user('00000000-0000-0000-0000-000000002313');
-select pg_temp.expect_error(
-  $$update retention_policies set punch_photos_months = 3 where venue_id = '00000000-0000-0000-0000-00000023aa01'$$,
+update retention_policies set punch_photos_months = 3 where venue_id = '00000000-0000-0000-0000-00000023aa01';
+select pg_temp.expect(
+  (select punch_photos_months from retention_policies where venue_id = '00000000-0000-0000-0000-00000023aa01') = 12,
   'a manager without manage_settings cannot change retention');
+select pg_temp.expect_error(
+  $$insert into retention_policies (venue_id) values ('00000000-0000-0000-0000-00000023bb01')$$,
+  'a manager cannot create retention settings either');
 
 select pg_temp.as_user('00000000-0000-0000-0000-000000002315');
 select pg_temp.expect(

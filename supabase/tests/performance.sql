@@ -136,11 +136,19 @@ select pg_temp.expect((select count(*) from worker_ratings) = 0 and (select coun
 
 -- ---- No function an employee can call reads these tables ----------------------------
 select pg_temp.as_owner();
+-- anonymize_worker (0023) is the one exception: it clears notes as part of removing
+-- someone's personal data. It returns nothing, needs manage_settings, and refuses a
+-- request the caller made themself, so it cannot be used to read any of this.
 select pg_temp.expect((select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public'
     and (p.prosrc ilike '%rehire_flags%' or p.prosrc ilike '%worker_ratings%' or p.prosrc ilike '%worker_notes%')
+    and p.proname <> 'anonymize_worker'
     and has_function_privilege('authenticated', p.oid, 'execute')) = 0,
   'no function callable by signed-in users reads ratings, notes or flags directly');
+
+select pg_temp.expect((select prorettype::regtype::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'anonymize_worker') = 'void',
+  'the one exception returns nothing, so it cannot leak what it clears');
 select pg_temp.expect(not has_table_privilege('anon', 'public.worker_notes', 'select'), 'anon cannot read notes');
 
 -- ---- Audit -----------------------------------------------------------------------------

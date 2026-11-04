@@ -369,7 +369,11 @@ select pg_temp.expect_error($$select add_incident_note(jsonb_build_object('id', 
   'a closed incident takes no notes');
 select pg_temp.expect((update_incident('00000000-0000-0000-0000-0000002110b1', 'following_up') ->> 'status') = 'following_up',
   'and can be reopened');
-select pg_temp.expect((select string_agg(kind, ',' order by created_at, id) from incident_notes where incident_id = '00000000-0000-0000-0000-0000002110b1') like 'assigned,status,status,status%',
+-- Order is not checked: inside one transaction every row shares created_at (now() is
+-- fixed), and the id tiebreak is a random uuid, so the order here is not stable.
+select pg_temp.expect(
+  (select count(*) filter (where kind = 'assigned') = 1 and count(*) filter (where kind = 'status') = 3
+     from incident_notes where incident_id = '00000000-0000-0000-0000-0000002110b1'),
   'owner and status changes are on the timeline');
 select pg_temp.as_owner();
 select pg_temp.expect((select count(*) from audit_logs where entity = 'incidents' and reason = 'Reported to HR, back next shift') >= 1,
