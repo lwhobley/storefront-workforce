@@ -50,9 +50,11 @@ export async function sendEmail(cfg: NonNullable<ReturnType<typeof resendConfig>
 
 type ServiceAccount = { client_email: string; private_key: string; token_uri?: string };
 
+// FIREBASE_* are the names Premium Command already uses for the same Firebase project,
+// so the same service account can be set here without renaming anything.
 export function fcmConfig(env: Env) {
-  const projectId = env("FCM_PROJECT_ID");
-  const raw = env("FCM_SERVICE_ACCOUNT");
+  const projectId = env("FCM_PROJECT_ID") ?? env("FIREBASE_PROJECT_ID");
+  const raw = env("FCM_SERVICE_ACCOUNT") ?? env("FIREBASE_SERVICE_ACCOUNT");
   if (!projectId || !raw) return null;
   try {
     const account = JSON.parse(raw) as ServiceAccount;

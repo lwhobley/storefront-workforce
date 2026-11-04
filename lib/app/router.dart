@@ -15,6 +15,7 @@ import '../features/pay/pay_screen.dart';
 import '../features/people/me_screen.dart';
 import '../features/people/onboarding_screen.dart';
 import '../features/admin/admin_screen.dart';
+import '../features/comms/comms_providers.dart';
 import '../features/people/partner_screen.dart';
 import '../features/shift_market/requests_screen.dart';
 import '../features/shift_market/schedule_screen.dart';
@@ -149,6 +150,14 @@ class AppShell extends ConsumerWidget {
     final index = found < 0 ? items.length - 1 : found;
     void go(int i) => context.go(items[i].path);
 
+    // Unread messages and alerts show as a count on the Inbox item.
+    final unread = ref.watch(unreadCountProvider);
+    Widget iconFor(NavItem item) {
+      final icon = Icon(item.icon);
+      if (item.path != '/inbox' || unread == 0) return icon;
+      return Badge.count(count: unread, child: icon);
+    }
+
     if (wide) {
       return Scaffold(
         body: Row(
@@ -157,7 +166,7 @@ class AppShell extends ConsumerWidget {
               selectedIndex: index,
               onDestinationSelected: go,
               labelType: NavigationRailLabelType.all,
-              destinations: [for (final i in items) NavigationRailDestination(icon: Icon(i.icon), label: Text(i.label))],
+              destinations: [for (final i in items) NavigationRailDestination(icon: iconFor(i), label: Text(i.label))],
             ),
             const VerticalDivider(width: 1),
             Expanded(child: child),
@@ -170,7 +179,7 @@ class AppShell extends ConsumerWidget {
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: go,
-        destinations: [for (final i in items) NavigationDestination(icon: Icon(i.icon), label: i.label)],
+        destinations: [for (final i in items) NavigationDestination(icon: iconFor(i), label: i.label)],
       ),
     );
   }

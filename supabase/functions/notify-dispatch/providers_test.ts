@@ -46,6 +46,18 @@ Deno.test("providers are off without their secrets", () => {
   assertEquals(fcmConfig((k) => ({ FCM_PROJECT_ID: "p", FCM_SERVICE_ACCOUNT: "not json" } as Record<string, string>)[k]), null);
 });
 
+Deno.test("push also reads Premium Command's FIREBASE_* names", () => {
+  const account = JSON.stringify({ client_email: "fcm@p.iam.gserviceaccount.com", private_key: "key" });
+  const cfg = fcmConfig((k) => ({ FIREBASE_PROJECT_ID: "pc-project", FIREBASE_SERVICE_ACCOUNT: account } as Record<string, string>)[k]);
+  assertEquals(cfg?.projectId, "pc-project");
+
+  // FCM_* wins when both are set, so a venue can point somewhere else later.
+  const both = fcmConfig((k) =>
+    ({ FCM_PROJECT_ID: "own", FCM_SERVICE_ACCOUNT: account, FIREBASE_PROJECT_ID: "pc-project", FIREBASE_SERVICE_ACCOUNT: account } as Record<string, string>)[k]
+  );
+  assertEquals(both?.projectId, "own");
+});
+
 Deno.test("email goes to Resend", async () => {
   const m = mockFetch(() => Response.json({ id: "e1" }));
   try {
