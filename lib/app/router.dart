@@ -14,6 +14,7 @@ import '../features/pay/pay_period_screen.dart';
 import '../features/pay/pay_screen.dart';
 import '../features/people/me_screen.dart';
 import '../features/people/onboarding_screen.dart';
+import '../features/admin/admin_screen.dart';
 import '../features/people/partner_screen.dart';
 import '../features/shift_market/requests_screen.dart';
 import '../features/shift_market/schedule_screen.dart';
@@ -52,6 +53,7 @@ List<NavItem> navFor(AppSession s) {
     if (s.canVenueWide(Perm.manageWorkers)) const NavItem('/onboarding', 'Onboarding', Icons.task_alt),
     if (s.isManagerView) const NavItem('/messages', 'Messages', Icons.campaign_outlined),
     if (s.can(Perm.viewReports)) const NavItem('/reports', 'Reports', Icons.insights_outlined),
+    if (s.canVenueWide('manage_settings')) const NavItem('/admin', 'Admin', Icons.settings_outlined),
     if (s.isManagerView) const NavItem('/checklists', 'Checklists', Icons.checklist),
     if (s.isManagerView) const NavItem('/incidents', 'Incidents', Icons.report_outlined),
     if (s.workerId != null && s.isManagerView) ...[
@@ -119,6 +121,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/reports', builder: (_, _) => const ReportsScreen()),
           GoRoute(path: '/checklists', builder: (_, _) => const ChecklistsScreen()),
           GoRoute(path: '/incidents', builder: (_, _) => const IncidentsScreen()),
+          GoRoute(path: '/admin', builder: (_, _) => const AdminScreen()),
         ],
       ),
     ],

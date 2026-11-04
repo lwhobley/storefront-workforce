@@ -10,6 +10,7 @@ import 'models.dart';
 // Used by the Phase 3 part files.
 // ignore: unused_import
 import 'app_notification.dart';
+import 'admin_repository.dart';
 import 'comms_repository.dart';
 import 'pay_data.dart';
 import 'operations_repository.dart';
@@ -25,6 +26,7 @@ part 'supabase/operations_supabase.dart';
 part 'supabase/performance_supabase.dart';
 part 'supabase/reports_supabase.dart';
 part 'supabase/shift_market_supabase.dart';
+part 'supabase/admin_supabase.dart';
 
 /// The real backend. Every read goes through row level security, and every schedule
 /// change goes through a database function that checks scope and logs the change.
@@ -593,6 +595,7 @@ abstract class _SupabaseCore implements WorkforceRepository {
 }
 
 /// The Supabase backend: the core above plus each Phase 3 area, in its own part file.
-class SupabaseWorkforceRepository extends _SupabaseCore with _SupabaseShiftMarket, _SupabaseComms, _SupabasePeople, _SupabaseReports, _SupabasePerformance, _SupabaseOperations {
+class SupabaseWorkforceRepository extends _SupabaseCore with _SupabaseShiftMarket, _SupabaseComms, _SupabasePeople, _SupabaseReports, _SupabasePerformance, _SupabaseOperations, _SupabaseAdmin {
   SupabaseWorkforceRepository(super.client);
 }
+

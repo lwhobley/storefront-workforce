@@ -7,6 +7,7 @@ import 'package:workforce_core/workforce_core.dart';
 import '../core/time/venue_time.dart';
 import 'models.dart';
 import 'app_notification.dart';
+import 'admin_repository.dart';
 import 'comms_repository.dart';
 import 'pay_data.dart';
 import 'operations_repository.dart';
@@ -22,6 +23,7 @@ part 'demo/operations_demo.dart';
 part 'demo/performance_demo.dart';
 part 'demo/reports_demo.dart';
 part 'demo/shift_market_demo.dart';
+part 'demo/admin_demo.dart';
 
 /// A demo persona: a PIN that signs in as one role in the sample arena.
 class DemoPersona {
@@ -36,7 +38,7 @@ class DemoPersona {
 /// action works (assign, move, send home, clock in) and follows the same rules as the
 /// real database, but nothing is saved after the page closes.
 abstract class _DemoCore implements WorkforceRepository {
-  _DemoCore({DateTime? now}) : _arena = SampleArena.generate(now: now ?? DateTime.now().toUtc()) {
+  _DemoCore({DateTime? now}) : _now = now ?? DateTime.now().toUtc(), _arena = SampleArena.generate(now: now ?? DateTime.now().toUtc()) {
     _shifts = {for (final s in _arena.shifts) s.id: s};
     _punches = [..._arena.punches];
     _events = {for (final e in _arena.events) e.id: e};
@@ -50,6 +52,9 @@ abstract class _DemoCore implements WorkforceRepository {
   }
 
   final SampleArena _arena;
+
+  /// The demo's idea of now, fixed so tests are repeatable.
+  final DateTime _now;
   late Map<String, Shift> _shifts;
   late List<Punch> _punches;
   late Map<String, Event> _events;
@@ -58,6 +63,13 @@ abstract class _DemoCore implements WorkforceRepository {
   late Map<String, Worker> _workers;
   final List<AssignmentChange> _changes = [];
   ReportTargets _reportTargets = ReportTargets.defaults;
+
+  // Phase 5 admin state, in memory for the demo.
+  RetentionPolicy _retention = RetentionPolicy.defaults;
+  final List<DeletionRequest> _deletionRequests = [];
+
+  /// Who asked for each deletion, so nobody approves their own.
+  final Map<String, String> _deletionRequesters = {};
   final Map<String, StreamController<void>> _streams = {};
   final Map<String, AppSession> _sessionsByPin = {};
   AppSession? _session;
@@ -901,7 +913,7 @@ abstract class _DemoCore implements WorkforceRepository {
 }
 
 /// The demo backend: the core above plus each Phase 3 area, in its own part file.
-class DemoWorkforceRepository extends _DemoCore with _DemoShiftMarket, _DemoComms, _DemoPeople, _DemoReports, _DemoPerformance, _DemoOperations {
+class DemoWorkforceRepository extends _DemoCore with _DemoShiftMarket, _DemoComms, _DemoPeople, _DemoReports, _DemoPerformance, _DemoOperations, _DemoAdmin {
   DemoWorkforceRepository({super.now}) {
     _seedPerformanceDemo();
   }
@@ -909,3 +921,4 @@ class DemoWorkforceRepository extends _DemoCore with _DemoShiftMarket, _DemoComm
   static const personas = _DemoCore.personas;
   static String kioskPinFor(Worker w) => _DemoCore.kioskPinFor(w);
 }
+

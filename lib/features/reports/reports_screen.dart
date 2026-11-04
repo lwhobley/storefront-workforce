@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:workforce_core/workforce_core.dart';
@@ -10,8 +11,9 @@ import '../../core/time/venue_time.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../../data/performance_repository.dart';
+import '../../data/reports_repository.dart';
 import '../pay/pay_logic.dart' show money;
-import 'reports_labor.dart';
+import '../schedule/schedule_actions.dart' show workerTypeLabel;
 
 Tone ragTone(Rag rag) => switch (rag) {
       Rag.green => Tone.good,
@@ -20,39 +22,13 @@ Tone ragTone(Rag rag) => switch (rag) {
       Rag.none => Tone.idle,
     };
 
-/// Event numbers added up for one season.
-class SeasonTotals {
-  SeasonTotals(this.season);
+String _percent(double? v) => v == null ? '—' : '${(v * 100).round()}%';
+String _hours(int minutes) => '${(minutes / 60).round()}h';
 
-  final Season season;
-  int events = 0;
-  int needed = 0;
-  int assigned = 0;
-  int attended = 0;
-  int late = 0;
-  int noShows = 0;
-  int? laborCostCents;
-  int? budgetCents;
-
-  double? get fillRate => needed == 0 ? null : assigned / needed;
-  double? get attendanceRate => assigned == 0 ? null : attended / assigned;
-}
-
-/// Event KPIs added up by season, newest first.
-List<SeasonTotals> seasonTotals(Iterable<(DateTime localStart, EventKpis kpis)> rows, {int startMonth = Season.defaultStartMonth}) {
-  final bySeason = <Season, SeasonTotals>{};
-  for (final (start, k) in rows) {
-    final s = bySeason.putIfAbsent(Season.of(start, startMonth: startMonth), () => SeasonTotals(Season.of(start, startMonth: startMonth)));
-    s.events++;
-    s.needed += k.needed;
-    s.assigned += k.assigned;
-    s.attended += k.attended;
-    s.late += k.late;
-    s.noShows += k.noShows;
-    if (k.laborCostCents != null) s.laborCostCents = (s.laborCostCents ?? 0) + k.laborCostCents!;
-    if (k.budgetCents != null) s.budgetCents = (s.budgetCents ?? 0) + k.budgetCents!;
-  }
-  return bySeason.values.toList()..sort((a, b) => b.season.compareTo(a.season));
+/// A fraction as the percent people type, without trailing zeros: 0.98 -> "98".
+String _typedPercent(double v) {
+  final p = double.parse((v * 100).toStringAsFixed(2));
+  return p == p.roundToDouble() ? '${p.round()}' : '$p';
 }
 
 String _budgetLabel(Rag rag) => switch (rag) {
@@ -62,77 +38,49 @@ String _budgetLabel(Rag rag) => switch (rag) {
       Rag.none => 'no budget',
     };
 
-String _percent(double? v) => v == null ? '—' : '${(v * 100).round()}%';
-
-/// A fraction as the percent people type, without trailing zeros: 0.98 -> "98", 0.985 -> "98.5".
-String _typedPercent(double v) {
-  final p = double.parse((v * 100).toStringAsFixed(2));
-  return p == p.roundToDouble() ? '${p.round()}' : '$p';
-}
-
 final reportTargetsProvider = FutureProvider.autoDispose<ReportTargets>((ref) {
   final session = ref.watch(sessionProvider)!;
   return ref.read(repositoryProvider).loadReportTargets(session);
 });
 
-/// Everything the reports show, worked out from finished and live events.
-class ReportsData {
-  const ReportsData({
-    required this.events,
-    required this.localStarts,
-    required this.performance,
-    required this.workerNames,
-  });
+/// Which season the reports cover. 0 is the current season, 1 the one before.
+final reportSeasonBackProvider = StateProvider<int>((ref) => 0);
 
-  /// One per finished or live event.
-  final List<EventKpis> events;
+Season _season(AppSession session, int back) {
+  final startMonth = Season.startMonthFrom(session.venue.settings);
+  final today = venueDate(DateTime.now().toUtc(), session.venue.timeZone);
+  final current = Season.of(today, startMonth: startMonth);
+  return Season(current.startYear - back, startMonth: startMonth);
+}
 
-  /// Local start date of each event, by event id.
-  final Map<String, DateTime> localStarts;
+class ReportsBundle {
+  const ReportsBundle({required this.report, required this.season, required this.performance, required this.workerNames});
 
-  /// Outcomes, ratings and do-not-rehire flags; null when the viewer cannot see staff.
+  final ReportResult report;
+  final Season season;
+
+  /// Outcomes, ratings and flags; null when the viewer cannot see staff.
   final PerformanceData? performance;
-
-  /// Names of the people in [performance]; empty when the viewer cannot see staff.
   final Map<String, String> workerNames;
 }
 
-final reportsDataProvider = FutureProvider.autoDispose<ReportsData>((ref) async {
+final reportsProvider = FutureProvider.autoDispose<ReportsBundle>((ref) async {
   final session = ref.watch(sessionProvider)!;
   final repo = ref.read(repositoryProvider);
   final venue = await ref.watch(venueProvider.future);
-  final events = await ref.watch(eventsProvider.future);
-  final zone = session.venue.timeZone;
-  final done = [
-    for (final e in events)
-      if (e.status == EventStatus.completed || e.status == EventStatus.live) e,
-  ];
-  final boards = await Future.wait([for (final e in done) repo.loadBoard(e.id)]);
-  // Labor cost needs the pay setup, so it is only worked out for people who can view pay.
-  var labor = <String, LaborCostReport>{};
-  if (session.canVenueWide('view_pay')) {
-    await repo.ensurePayPeriods(session, DateTime.now().toUtc());
-    final setup = await repo.loadPaySetup(session);
-    labor = await laborCostByEvent(repo: repo, session: session, venue: venue, setup: setup, events: done);
-  }
+  final season = _season(session, ref.watch(reportSeasonBackProvider));
+  final data = await (repo as ReportsRepository).loadReportData(session, season.firstDay, season.lastDay);
 
-  final kpis = <EventKpis>[];
-  final localStarts = <String, DateTime>{};
-  for (final b in boards) {
-    final id = b.event.id;
-    localStarts[id] = venueDate(b.event.startTime, zone);
-    kpis.add(calculateEventKpis(
-      eventId: id,
-      shifts: b.shifts,
-      needs: b.needs,
-      punches: b.punches,
-      attendance: session.rules.attendance,
-      labor: labor[id],
-    ));
-  }
+  final report = buildReport(
+    data: data,
+    rules: venue.rules,
+    timeZone: session.venue.timeZone,
+    from: season.firstDay,
+    to: season.lastDay,
+    now: DateTime.now().toUtc(),
+    jobRoles: venue.jobRoles,
+  );
 
-  // Outcomes, ratings and flags come from the performance area, which keeps one
-  // definition of what counts as on time, a no-show or a call-off.
   final names = <String, String>{};
   PerformanceData? performance;
   if (session.canVenueWide(Perm.viewWorkers)) {
@@ -141,10 +89,10 @@ final reportsDataProvider = FutureProvider.autoDispose<ReportsData>((ref) async 
     }
     performance = await (repo as PerformanceRepository).loadPerformance(session);
   }
-  return ReportsData(events: kpis, localStarts: localStarts, performance: performance, workerNames: names);
+  return ReportsBundle(report: report, season: season, performance: performance, workerNames: names);
 });
 
-enum _ReportView { events, seasons, people }
+enum _View { overview, events, people }
 
 class ReportsScreen extends ConsumerStatefulWidget {
   const ReportsScreen({super.key});
@@ -154,23 +102,23 @@ class ReportsScreen extends ConsumerStatefulWidget {
 }
 
 class _ReportsScreenState extends ConsumerState<ReportsScreen> {
-  _ReportView _view = _ReportView.events;
+  _View _view = _View.overview;
+
+  PerformanceRepository get _performance => ref.read(repositoryProvider) as PerformanceRepository;
 
   @override
   Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider)!;
-    final zone = session.venue.timeZone;
-    final data = ref.watch(reportsDataProvider);
+    final async = ref.watch(reportsProvider);
     final targets = ref.watch(reportTargetsProvider).value ?? ReportTargets.defaults;
-    final events = {for (final e in ref.watch(eventsProvider).value ?? const <Event>[]) e.id: e};
-    final day = DateFormat('EEE MMM d');
+    final back = ref.watch(reportSeasonBackProvider);
     final canPeople = session.canVenueWide(Perm.viewWorkers);
 
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(reportsDataProvider);
+            ref.invalidate(reportsProvider);
             ref.invalidate(reportTargetsProvider);
           },
           child: ListView(
@@ -179,6 +127,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
               ScreenHeader(
                 kicker: session.venue.name,
                 title: 'Reports',
+                subtitle: async.value?.season.rangeLabel,
                 actions: [
                   if (session.canVenueWide('manage_settings'))
                     TextButton.icon(
@@ -186,46 +135,55 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                       icon: const Icon(Icons.tune),
                       label: const Text('Targets'),
                     ),
-                  if (data.hasValue && data.value!.events.isNotEmpty)
+                  if (async.hasValue)
                     TextButton.icon(
-                      onPressed: () async {
-                        final ok = await saveTextFile('event-kpis.csv', eventKpisCsv(data.value!.events));
-                        if (context.mounted && ok) showMessage(context, 'Saved event-kpis.csv');
-                      },
+                      onPressed: () => _export(async.value!, targets, csv: true),
                       icon: const Icon(Icons.download_outlined),
-                      label: const Text('Export CSV'),
+                      label: const Text('CSV'),
+                    ),
+                  if (async.hasValue)
+                    TextButton.icon(
+                      onPressed: () => _export(async.value!, targets, csv: false),
+                      icon: const Icon(Icons.print_outlined),
+                      label: const Text('Print / PDF'),
                     ),
                 ],
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
-                child: SegmentedButton<_ReportView>(
-                  segments: [
-                    const ButtonSegment(value: _ReportView.events, label: Text('Events')),
-                    const ButtonSegment(value: _ReportView.seasons, label: Text('Seasons')),
-                    if (canPeople) const ButtonSegment(value: _ReportView.people, label: Text('People')),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SegmentedButton<_View>(
+                      segments: [
+                        const ButtonSegment(value: _View.overview, label: Text('Overview')),
+                        const ButtonSegment(value: _View.events, label: Text('Events')),
+                        if (canPeople) const ButtonSegment(value: _View.people, label: Text('People')),
+                      ],
+                      selected: {_view},
+                      onSelectionChanged: (v) => setState(() => _view = v.first),
+                    ),
+                    DropdownButton<int>(
+                      value: back,
+                      underline: const SizedBox.shrink(),
+                      items: [
+                        for (final b in const [0, 1, 2])
+                          DropdownMenuItem(value: b, child: Text('Season ${_season(session, b).label}')),
+                      ],
+                      onChanged: (v) => ref.read(reportSeasonBackProvider.notifier).state = v ?? 0,
+                    ),
                   ],
-                  selected: {_view},
-                  onSelectionChanged: (v) => setState(() => _view = v.first),
                 ),
               ),
-              if (_view == _ReportView.events)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
-                  child: Text(
-                    'Fill rate: green ${_typedPercent(targets.fillGreen)}%+, yellow ${_typedPercent(targets.fillYellow)}%+. '
-                    'Attendance: green ${_typedPercent(targets.attendanceGreen)}%+, yellow ${_typedPercent(targets.attendanceYellow)}%+. '
-                    'Finished and live events only.',
-                    style: AppText.meta,
-                  ),
-                ),
-              ...data.when(
+              ...async.when(
                 loading: () => [const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator()))],
-                error: (e, _) => [ErrorNote(e, onRetry: () => ref.invalidate(reportsDataProvider))],
-                data: (d) => switch (_view) {
-                  _ReportView.events => _eventRows(d, events, targets, zone, day),
-                  _ReportView.seasons => _seasonRows(d, targets),
-                  _ReportView.people => _peopleRows(d),
+                error: (e, _) => [ErrorNote(e, onRetry: () => ref.invalidate(reportsProvider))],
+                data: (b) => switch (_view) {
+                  _View.overview => _overview(b, targets, session),
+                  _View.events => _eventRows(b, targets, session),
+                  _View.people => _peopleRows(b),
                 },
               ),
             ],
@@ -235,34 +193,141 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     );
   }
 
-  List<Widget> _eventRows(ReportsData d, Map<String, Event> events, ReportTargets targets, String zone, DateFormat day) {
-    if (d.events.isEmpty) return [const EmptyNote('No finished or live events yet.')];
-    final sorted = [...d.events]..sort((a, b) {
-        final ta = events[a.eventId]?.startTime ?? DateTime.utc(1900);
-        final tb = events[b.eventId]?.startTime ?? DateTime.utc(1900);
-        return tb.compareTo(ta);
-      });
-    return [
-      for (final k in sorted) _EventKpiTile(kpis: k, event: events[k.eventId], targets: targets, zone: zone, day: day),
-    ];
-  }
+  // ---- Overview ----
 
-  List<Widget> _seasonRows(ReportsData d, ReportTargets targets) {
-    if (d.events.isEmpty) return [const EmptyNote('No finished or live events yet.')];
-    final seasons = seasonTotals(
-      [
-        for (final k in d.events)
-          if (d.localStarts[k.eventId] != null) (d.localStarts[k.eventId]!, k),
+  List<Widget> _overview(ReportsBundle b, ReportTargets targets, AppSession session) {
+    final t = b.report.total;
+    if (!t.hasActivity) return [const EmptyNote('No events held this season yet.')];
+    final zone = session.venue.timeZone;
+    return [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpace.screen, vertical: 8),
+        child: Wrap(spacing: 10, runSpacing: 10, children: [
+          StatTile(label: 'Events held', value: '${t.events}', detail: '${b.report.upcomingEvents.length} upcoming'),
+          StatTile(
+            label: 'Fill rate',
+            value: _percent(t.fillRate),
+            detail: '${t.staffed}/${t.planned} positions',
+            tone: ragTone(targets.fill(t.fillRate)),
+          ),
+          StatTile(
+            label: 'On time',
+            value: _percent(t.onTimeRate),
+            detail: '${t.late} late · ${t.noShows} no-shows · ${t.callOffs} call-offs',
+            tone: ragTone(targets.attendance(t.onTimeRate)),
+          ),
+          StatTile(label: 'Hours worked', value: _hours(t.workedMinutes), detail: '${_percent(t.overtimeShare)} overtime'),
+          StatTile(
+            label: 'Break compliance',
+            value: _percent(t.breakComplianceRate),
+            detail: '${t.breakExceptions} of ${t.breaksDue} missed, late or short',
+            tone: ragTone(rateRag(t.breakComplianceRate, green: 0.98, yellow: 0.9)),
+          ),
+          if (b.report.hasMoney) ...[
+            StatTile(
+              label: 'Labor cost',
+              value: money(t.laborCents),
+              detail: t.budgets == 0 ? 'no budget set' : '${money(t.budgetCents)} budget',
+              tone: t.budgets == 0 ? Tone.idle : ragTone(targets.budget(t.budgetedCostCents, t.budgetCents)),
+            ),
+            if (t.costPerAttendeeCents != null)
+              StatTile(label: 'Cost per attendee', value: money(t.costPerAttendeeCents!), detail: '${t.attendees} attended'),
+            if (t.tipsCents > 0) StatTile(label: 'Tips', value: money(t.tipsCents), detail: 'not labor cost'),
+          ],
+        ]),
+      ),
+      const SectionHeading('Staffing mix'),
+      for (final e in b.report.byWorkerType.entries)
+        ListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
+          title: Text(workerTypeLabel(e.key)),
+          subtitle: Text('${e.value.staffed} positions · ${_hours(e.value.workedMinutes)}'),
+          trailing: b.report.hasMoney ? Text(money(e.value.laborCents), style: AppText.meta) : null,
+        ),
+      if (b.report.npoGroups.isNotEmpty) ...[
+        const SectionHeading('Nonprofit groups'),
+        for (final g in b.report.npoGroups)
+          ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
+            title: Text(ref.read(venueProvider).value?.npoName(g.groupId) ?? 'Group'),
+            subtitle: Text('${_hours(g.totals.workedMinutes)} · ${g.payouts} payouts${g.estimated > 0 ? ' · ${g.estimated} estimated' : ''}'),
+            trailing: Text('${money(g.owedCents)} owed', style: AppText.meta),
+          ),
       ],
-      startMonth: Season.startMonthFrom(ref.read(sessionProvider)!.venue.settings),
-    );
-    return [
-      for (final s in seasons) _SeasonTile(totals: s, targets: targets),
+      if (b.report.tips.isNotEmpty) ...[
+        const SectionHeading('Tips, most first'),
+        for (final w in b.report.tips.take(10))
+          ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
+            title: Text(b.workerNames[w.workerId] ?? 'Staff member'),
+            subtitle: Text('${w.events} events · ${(w.hoursHundredths / 100).toStringAsFixed(1)}h'),
+            trailing: Text('${money(w.cents)}${w.centsPerHour == null ? '' : ' · ${money(w.centsPerHour!)}/h'}', style: AppText.meta),
+          ),
+      ],
+      Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpace.screen, 16, AppSpace.screen, 0),
+        child: Text(
+          'Season ${b.season.label} (${b.season.rangeLabel}), venue time ($zone). '
+          '${b.report.hasMoney ? '' : 'Money is left out because you cannot see pay. '}'
+          '${b.report.npoPayoutsEstimated > 0 ? '${b.report.npoPayoutsEstimated} payouts are estimated from time records. ' : ''}'
+          '${b.report.tipPoolsEstimated > 0 ? '${b.report.tipPoolsEstimated} tip pools are estimated. ' : ''}',
+          style: AppText.meta,
+        ),
+      ),
     ];
   }
 
-  List<Widget> _peopleRows(ReportsData d) {
-    final p = d.performance;
+  // ---- Events ----
+
+  List<Widget> _eventRows(ReportsBundle b, ReportTargets targets, AppSession session) {
+    if (b.report.events.isEmpty) return [const EmptyNote('No events this season.')];
+    final zone = session.venue.timeZone;
+    final day = DateFormat('EEE MMM d');
+    final shown = [...b.report.events]..sort((x, y) => y.event.startTime.compareTo(x.event.startTime));
+    return [
+      for (final e in shown)
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen, vertical: 6),
+          isThreeLine: true,
+          title: Text(e.event.name),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${day.format(atVenue(e.event.startTime, zone))}${e.upcoming ? ' · upcoming' : ''}', style: AppText.meta),
+              Text(
+                'Staffed ${e.total.staffed}/${e.total.planned}'
+                '${e.upcoming ? '' : ' · On time ${e.total.onTime} · Late ${e.total.late} · No-shows ${e.total.noShows}'}',
+              ),
+              if (!e.upcoming && b.report.hasMoney && e.total.laborCents > 0)
+                Text(
+                  'Labor ${money(e.total.laborCents)}'
+                  '${e.eventBudgetCents == null ? '' : ' of ${money(e.eventBudgetCents!)}'}'
+                  '${e.total.costPerAttendeeCents == null ? '' : ' · ${money(e.total.costPerAttendeeCents!)} per attendee'}',
+                  style: AppText.meta,
+                ),
+              const SizedBox(height: 6),
+              Wrap(spacing: 6, runSpacing: 6, children: [
+                StatusTag('Fill ${_percent(e.total.fillRate)}', ragTone(targets.fill(e.total.fillRate))),
+                if (!e.upcoming) StatusTag('On time ${_percent(e.total.onTimeRate)}', ragTone(targets.attendance(e.total.onTimeRate))),
+                if (!e.upcoming && e.eventBudgetCents != null)
+                  StatusTag(
+                    'Budget ${_budgetLabel(targets.budget(e.total.laborCents, e.eventBudgetCents))}',
+                    ragTone(targets.budget(e.total.laborCents, e.eventBudgetCents)),
+                  ),
+              ]),
+            ],
+          ),
+        ),
+    ];
+  }
+
+  // ---- People ----
+
+  List<Widget> _peopleRows(ReportsBundle b) {
+    final p = b.performance;
     if (p == null) return [const EmptyNote('You cannot see staff records.')];
     if (p.outcomes.isEmpty) return [const EmptyNote('No assigned shifts yet.')];
     final canManage = ref.read(sessionProvider)!.canVenueWide(Perm.manageWorkers);
@@ -275,14 +340,15 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       final s = stars[id];
       return s == null ? null : s.$1 / s.$2;
     }
+
     // Lowest scores first, then people with too few events to score.
     final people = [for (final id in {for (final o in p.outcomes) o.workerId}) reliabilityOf(id, p.outcomes, rules: p.rules, now: p.now)]
-      ..sort((a, b) => (a.score ?? 101).compareTo(b.score ?? 101));
+      ..sort((x, y) => (x.score ?? 101).compareTo(y.score ?? 101));
     return [
       for (final r in people)
         _ReliabilityTile(
           record: r,
-          name: d.workerNames[r.workerId] ?? 'Staff member',
+          name: b.workerNames[r.workerId] ?? 'Staff member',
           stars: avgStars(r.workerId),
           rehireBlockReason: p.flags[r.workerId]?.reason,
           canManage: canManage,
@@ -293,7 +359,91 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     ];
   }
 
-  PerformanceRepository get _performance => ref.read(repositoryProvider) as PerformanceRepository;
+  // ---- Exports ----
+
+  List<ReportTable> _tables(ReportsBundle b, ReportTargets targets) {
+    final zone = ref.read(sessionProvider)!.venue.timeZone;
+    final day = DateFormat('yyyy-MM-dd');
+    final t = b.report.total;
+    final hasMoney = b.report.hasMoney;
+
+    return [
+      ReportTable(
+        title: 'Season ${b.season.label}',
+        columns: const ['Measure', 'Value', 'Detail'],
+        rows: [
+          ['Events held', '${t.events}', '${b.report.upcomingEvents.length} upcoming'],
+          ['Positions planned', '${t.planned}', '${t.staffed} staffed, ${t.open} open'],
+          ['Fill rate', _percent(t.fillRate), '${t.open} positions never filled'],
+          ['On-time rate', _percent(t.onTimeRate), '${t.late} late, ${t.noShows} no-shows, ${t.callOffs} call-offs'],
+          ['Hours worked', _hours(t.workedMinutes), '${_percent(t.overtimeShare)} overtime'],
+          ['Break compliance', _percent(t.breakComplianceRate), '${t.breakExceptions} of ${t.breaksDue}'],
+          if (hasMoney) ['Labor cost', money(t.laborCents), t.budgets == 0 ? 'no budget' : '${money(t.budgetCents)} budget'],
+          if (hasMoney && t.costPerAttendeeCents != null) ['Cost per attendee', money(t.costPerAttendeeCents!), '${t.attendees} attended'],
+        ],
+      ),
+      ReportTable(
+        title: 'Events',
+        columns: [
+          'Date', 'Event', 'Planned', 'Staffed', 'Fill %', 'On time', 'Late', 'No-shows', 'Hours',
+          if (hasMoney) ...['Labor', 'Budget'],
+        ],
+        rows: [
+          for (final e in b.report.events)
+            [
+              day.format(atVenue(e.event.startTime, zone)),
+              e.event.name,
+              '${e.total.planned}',
+              '${e.total.staffed}',
+              _percent(e.total.fillRate),
+              '${e.total.onTime}',
+              '${e.total.late}',
+              '${e.total.noShows}',
+              _hours(e.total.workedMinutes),
+              if (hasMoney) ...[money(e.total.laborCents), e.eventBudgetCents == null ? '' : money(e.eventBudgetCents!)],
+            ],
+        ],
+      ),
+      if (b.performance != null)
+        ReportTable(
+          title: 'People',
+          columns: const ['Name', 'Reliability', 'On time', 'Late', 'No-shows', 'Call-offs', 'Do not rehire'],
+          rows: [
+            for (final id in {for (final o in b.performance!.outcomes) o.workerId})
+              () {
+                final s = reliabilityOf(id, b.performance!.outcomes, rules: b.performance!.rules, now: b.performance!.now);
+                final c = AttendanceSummary(s.counted);
+                return [
+                  b.workerNames[id] ?? 'Staff member',
+                  s.score == null ? 'New' : '${s.score}',
+                  '${c.onTime}',
+                  '${c.late}',
+                  '${c.noShows}',
+                  '${c.callOffs}',
+                  b.performance!.flags[id]?.reason ?? '',
+                ];
+              }(),
+          ],
+        ),
+    ];
+  }
+
+  Future<void> _export(ReportsBundle b, ReportTargets targets, {required bool csv}) async {
+    final venue = ref.read(sessionProvider)!.venue.name;
+    final tables = _tables(b, targets);
+    final name = 'reports-${b.season.label.replaceAll('–', '-')}';
+    final ok = csv
+        ? await saveTextFile('$name.csv', tablesToCsv(tables))
+        : await saveTextFile(
+            '$name.html',
+            reportHtml(title: '$venue — season ${b.season.label}', subtitle: b.season.rangeLabel, tables: tables),
+            mimeType: 'text/html',
+          );
+    if (!mounted || !ok) return;
+    showMessage(context, csv ? 'Saved $name.csv' : 'Saved $name.html — open it and print to PDF');
+  }
+
+  // ---- Actions ----
 
   Future<void> _rate(String workerId) async {
     final session = ref.read(sessionProvider)!;
@@ -301,7 +451,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     if (chosen == null) return;
     try {
       await _performance.addRating(session, workerId, stars: chosen.$1, note: chosen.$2);
-      ref.invalidate(reportsDataProvider);
+      ref.invalidate(reportsProvider);
       if (mounted) showMessage(context, 'Rating saved');
     } on AppFailure catch (e) {
       if (mounted) showMessage(context, e.message);
@@ -316,12 +466,12 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       hint: 'Reason',
       action: 'Flag',
       suggestions: const ['No-call, no-show', 'Left without notice', 'Conduct', 'Safety'],
-      message: 'This shows on the reports and warns when they are scheduled.',
+      message: 'This shows on the reports and blocks them from being scheduled.',
     );
     if (reason == null || reason.trim().isEmpty) return;
     try {
       await _performance.setDoNotRehire(session, workerId, reason);
-      ref.invalidate(reportsDataProvider);
+      ref.invalidate(reportsProvider);
       if (mounted) showMessage(context, 'Flagged do not rehire');
     } on AppFailure catch (e) {
       if (mounted) showMessage(context, e.message);
@@ -332,7 +482,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     final session = ref.read(sessionProvider)!;
     try {
       await _performance.clearDoNotRehire(session, workerId);
-      ref.invalidate(reportsDataProvider);
+      ref.invalidate(reportsProvider);
       if (mounted) showMessage(context, 'Flag cleared');
     } on AppFailure catch (e) {
       if (mounted) showMessage(context, e.message);
@@ -340,52 +490,9 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   }
 }
 
-class _RateDialog extends StatefulWidget {
-  const _RateDialog();
-
-  @override
-  State<_RateDialog> createState() => _RateDialogState();
-}
-
-class _RateDialogState extends State<_RateDialog> {
-  int _stars = 4;
-  final _note = TextEditingController();
-
-  @override
-  void dispose() {
-    _note.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Rate'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          DropdownButton<int>(
-            value: _stars,
-            items: [for (var s = 1; s <= 5; s++) DropdownMenuItem(value: s, child: Text('$s star${s == 1 ? '' : 's'}'))],
-            onChanged: (v) => setState(() => _stars = v ?? _stars),
-          ),
-          TextField(controller: _note, decoration: const InputDecoration(labelText: 'Note (optional)'), maxLength: 500),
-        ],
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.of(context).pop((_stars, _note.text.trim())), child: const Text('Save')),
-      ],
-    );
-  }
-}
-
 Future<void> _editTargets(BuildContext context, WidgetRef ref, ReportTargets current) async {
   final session = ref.read(sessionProvider)!;
-  final chosen = await showDialog<ReportTargets>(
-    context: context,
-    builder: (_) => _TargetsDialog(current: current),
-  );
+  final chosen = await showDialog<ReportTargets>(context: context, builder: (_) => _TargetsDialog(current: current));
   if (chosen == null) return;
   try {
     await ref.read(repositoryProvider).saveReportTargets(session, chosen);
@@ -426,10 +533,7 @@ class _TargetsDialogState extends State<_TargetsDialog> {
   }
 
   void _save() {
-    final fg = _read(_fillGreen);
-    final fy = _read(_fillYellow);
-    final ag = _read(_attGreen);
-    final ay = _read(_attYellow);
+    final fg = _read(_fillGreen), fy = _read(_fillYellow), ag = _read(_attGreen), ay = _read(_attYellow);
     if (fg == null || fy == null || ag == null || ay == null) {
       setState(() => _error = 'Enter each target as a percentage.');
       return;
@@ -450,16 +554,13 @@ class _TargetsDialogState extends State<_TargetsDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Green when at or above the first number, yellow at or above the second, red below.'),
+          const Text('Green at or above the first number, yellow at or above the second, red below.'),
           const SizedBox(height: 12),
           TextField(controller: _fillGreen, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fill rate green %')),
           TextField(controller: _fillYellow, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fill rate yellow %')),
-          TextField(controller: _attGreen, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Attendance green %')),
-          TextField(controller: _attYellow, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Attendance yellow %')),
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Text(_error!, style: AppText.meta),
-          ],
+          TextField(controller: _attGreen, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'On-time green %')),
+          TextField(controller: _attYellow, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'On-time yellow %')),
+          if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: AppText.meta)],
         ],
       ),
       actions: [
@@ -470,85 +571,42 @@ class _TargetsDialogState extends State<_TargetsDialog> {
   }
 }
 
-class _EventKpiTile extends StatelessWidget {
-  const _EventKpiTile({required this.kpis, required this.event, required this.targets, required this.zone, required this.day});
-
-  final EventKpis kpis;
-  final Event? event;
-  final ReportTargets targets;
-  final String zone;
-  final DateFormat day;
+class _RateDialog extends StatefulWidget {
+  const _RateDialog();
 
   @override
-  Widget build(BuildContext context) {
-    final fillRag = targets.fill(kpis.fillRate);
-    final attRag = targets.attendance(kpis.attendanceRate);
-    final mix = kpis.staffingMix.entries.map((e) => '${e.value} ${e.key}').join(', ');
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen, vertical: 6),
-      isThreeLine: true,
-      title: Text(event?.name ?? kpis.eventId),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (event != null) Text(day.format(atVenue(event!.startTime, zone)), style: AppText.meta),
-          Text(
-            'Staffed ${kpis.assigned}/${kpis.needed} · Attended ${kpis.attended}/${kpis.assigned} · '
-            'Late ${kpis.late} · No-shows ${kpis.noShows}',
-          ),
-          Text(mix.isEmpty ? 'No one assigned' : mix, style: AppText.meta),
-          if (kpis.laborCostCents != null)
-            Text(
-              'Labor ${money(kpis.laborCostCents!)}'
-              '${kpis.budgetCents == null ? '' : ' of ${money(kpis.budgetCents!)} budget'}'
-              '${kpis.costPerAttendeeCents == null ? '' : ' · ${money(kpis.costPerAttendeeCents!)} per attendee'}',
-            ),
-          const SizedBox(height: 6),
-          Wrap(spacing: 6, runSpacing: 6, children: [
-            StatusTag('Fill ${_percent(kpis.fillRate)}', ragTone(fillRag)),
-            StatusTag('Attendance ${_percent(kpis.attendanceRate)}', ragTone(attRag)),
-            if (kpis.laborCostCents != null && kpis.budgetCents != null)
-              StatusTag('Budget ${_budgetLabel(targets.budget(kpis.laborCostCents!, kpis.budgetCents))}',
-                  ragTone(targets.budget(kpis.laborCostCents!, kpis.budgetCents))),
-          ]),
-        ],
-      ),
-    );
-  }
+  State<_RateDialog> createState() => _RateDialogState();
 }
 
-class _SeasonTile extends StatelessWidget {
-  const _SeasonTile({required this.totals, required this.targets});
+class _RateDialogState extends State<_RateDialog> {
+  int _stars = 4;
+  final _note = TextEditingController();
 
-  final SeasonTotals totals;
-  final ReportTargets targets;
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final s = totals;
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen, vertical: 6),
-      isThreeLine: true,
-      title: Text('Season ${s.season.label}'),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return AlertDialog(
+      title: const Text('Rate'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            '${s.events} events · Staffed ${s.assigned}/${s.needed} · Attended ${s.attended}/${s.assigned} · '
-            'Late ${s.late} · No-shows ${s.noShows}',
+          DropdownButton<int>(
+            value: _stars,
+            items: [for (var s = 1; s <= 5; s++) DropdownMenuItem(value: s, child: Text('$s star${s == 1 ? '' : 's'}'))],
+            onChanged: (v) => setState(() => _stars = v ?? _stars),
           ),
-          if (s.laborCostCents != null)
-            Text(
-              'Labor ${money(s.laborCostCents!)}${s.budgetCents == null ? '' : ' of ${money(s.budgetCents!)} budget'}',
-              style: AppText.meta,
-            ),
-          const SizedBox(height: 6),
-          Wrap(spacing: 6, runSpacing: 6, children: [
-            StatusTag('Fill ${_percent(s.fillRate)}', ragTone(targets.fill(s.fillRate))),
-            StatusTag('Attendance ${_percent(s.attendanceRate)}', ragTone(targets.attendance(s.attendanceRate))),
-          ]),
+          TextField(controller: _note, decoration: const InputDecoration(labelText: 'Note (optional)'), maxLength: 500),
         ],
       ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.of(context).pop((_stars, _note.text.trim())), child: const Text('Save')),
+      ],
     );
   }
 }
