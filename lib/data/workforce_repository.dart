@@ -84,20 +84,9 @@ abstract class WorkforceRepository {
   /// Needs manage_settings. Throws [AppFailure] for bounds that break the rules.
   Future<void> saveReportTargets(AppSession session, ReportTargets targets);
 
-  /// Every rating at the venue, newest first. Needs view_workers.
-  Future<List<WorkerRating>> loadWorkerRatings(AppSession session);
-
-  /// Adds a rating; ratings are never edited. Needs manage_workers.
-  Future<void> rateWorker(AppSession session, {required String workerId, String? eventId, required int stars, String note = ''});
-
   /// People flagged do-not-rehire, with the reason for each. Needs view_workers.
+  /// Ratings and setting the flag live on [PerformanceRepository].
   Future<Map<String, String>> loadRehireFlags(AppSession session);
-
-  /// Flags a person do-not-rehire with a reason. Needs manage_workers.
-  Future<void> flagDoNotRehire(AppSession session, String workerId, String reason);
-
-  /// Clears a do-not-rehire flag. Needs manage_workers.
-  Future<void> clearDoNotRehire(AppSession session, String workerId);
 
   // ---- Kiosk ----
   Future<KioskIdentity> kioskIdentify(String pin);

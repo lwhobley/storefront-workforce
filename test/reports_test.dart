@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:storefront_workforce/data/demo_repository.dart';
-import 'package:storefront_workforce/data/models.dart';
 import 'package:storefront_workforce/core/time/venue_time.dart';
 import 'package:storefront_workforce/features/reports/reports_labor.dart';
+import 'package:storefront_workforce/features/reports/reports_screen.dart' show seasonTotals;
 import 'package:workforce_core/workforce_core.dart';
 
 void main() {
@@ -85,44 +85,41 @@ void main() {
       rows.add((venueDate(e.startTime, session.venue.timeZone), k));
     }
 
-    final people = reliabilityOf(outcomes);
-    expect(people, isNotEmpty);
-    for (final r in people) {
-      expect(r.onTime + r.late + r.noShows + r.callOffs, r.expected, reason: r.workerId);
+    final rules = ReliabilityRules.fromVenueSettings(session.venue.settings);
+    final ids = {for (final o in outcomes) o.workerId};
+    expect(ids, isNotEmpty);
+    for (final id in ids) {
+      final s = reliabilityOf(id, outcomes, rules: rules, now: now);
+      expect(s.score == null || (s.score! >= 0 && s.score! <= 100), isTrue, reason: id);
     }
-    expect(people.any((r) => r.expected > 0), isTrue);
 
-    final seasons = seasonSummaries(rows);
+    final seasons = seasonTotals(rows);
     expect(seasons.fold(0, (s, x) => s + x.events), done.length);
+    expect(seasons.first.season.label, matches(r'^\d{4}–\d{2}$'));
   });
 
-  test('ratings are added and kept; do-not-rehire is flagged with a reason and can be cleared', () async {
+  test('do-not-rehire flags reach the assign sheet through loadRehireFlags', () async {
     final repo = DemoWorkforceRepository(now: DateTime.utc(2026, 11, 4, 1, 42));
     final session = await repo.signInWithPin('100001');
     final person = (await repo.listWorkers(session)).firstWhere((w) => w.type == WorkerType.regular);
 
-    await repo.rateWorker(session, workerId: person.id, stars: 5, note: 'Great with the line');
-    await repo.rateWorker(session, workerId: person.id, stars: 3);
-    final ratings = (await repo.loadWorkerRatings(session)).where((r) => r.workerId == person.id).toList();
-    expect(ratings.length, 2);
-    expect(averageRatings(ratings)[person.id], 4);
-    await expectLater(repo.rateWorker(session, workerId: person.id, stars: 6), throwsA(isA<AppFailure>()));
-
-    await repo.flagDoNotRehire(session, person.id, 'Left mid-shift without notice');
+    await repo.setDoNotRehire(session, person.id, 'Left mid-shift without notice');
     expect((await repo.loadRehireFlags(session))[person.id], 'Left mid-shift without notice');
-    await expectLater(repo.flagDoNotRehire(session, person.id, '  '), throwsA(isA<AppFailure>()));
     await repo.clearDoNotRehire(session, person.id);
     expect((await repo.loadRehireFlags(session)).containsKey(person.id), isFalse);
   });
 
-  test('report targets: defaults until a manager saves new ones', () async {
+  test('report targets: defaults until a manager saves new ones, and bad bounds are refused', () async {
     final repo = DemoWorkforceRepository(now: DateTime.utc(2026, 11, 4, 1, 42));
     final session = await repo.signInWithPin('100001');
-    expect(await repo.loadReportTargets(session), ReportTargets.defaults);
+    expect((await repo.loadReportTargets(session)).isDefault, isTrue);
 
-    final saved = ReportTargets.tryCreate(fillGreen: 1, fillYellow: 0.95, attendanceGreen: 0.9, attendanceYellow: 0.8)!;
+    final saved = ReportTargets.defaults.copyWith(fillGreen: 1, fillYellow: 0.95, attendanceGreen: 0.9, attendanceYellow: 0.8);
+    expect(saved.validate(), isNull);
     await repo.saveReportTargets(session, saved);
-    expect(await repo.loadReportTargets(session), saved);
-    expect(ReportTargets.tryCreate(fillGreen: 0.9, fillYellow: 0.95, attendanceGreen: 0.9, attendanceYellow: 0.8), isNull);
+    expect((await repo.loadReportTargets(session)).fillGreen, 1);
+
+    expect(ReportTargets.defaults.copyWith(fillGreen: 0.9, fillYellow: 0.95).validate(), isNotNull, reason: 'yellow above green');
+    expect(ReportTargets.defaults.copyWith(attendanceGreen: 1.5).validate(), isNotNull, reason: 'out of range');
   });
 }

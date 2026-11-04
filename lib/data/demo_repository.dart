@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:workforce_core/workforce_core.dart';
@@ -57,8 +58,6 @@ abstract class _DemoCore implements WorkforceRepository {
   late Map<String, Worker> _workers;
   final List<AssignmentChange> _changes = [];
   ReportTargets _reportTargets = ReportTargets.defaults;
-  final List<WorkerRating> _ratings = [];
-  final Map<String, String> _rehireFlags = {};
   final Map<String, StreamController<void>> _streams = {};
   final Map<String, AppSession> _sessionsByPin = {};
   AppSession? _session;
@@ -411,10 +410,14 @@ abstract class _DemoCore implements WorkforceRepository {
         return created;
       });
 
+  /// Flagged do not rehire (the performance part file keeps the flags).
+  bool _doNotRehire(String workerId) => false;
+
   /// Same hard checks as the database's assignment_block_reason().
   String? _blockReason(Worker w, Event e, String role, String shiftId) {
     final r = _arena.jobRoles.firstWhere((j) => j.code == role);
     if (w.status != 'active') return 'This person is inactive.';
+    if (_doNotRehire(w.id)) return 'This person is flagged do not rehire.';
     if (_shifts.values.any((s) => s.eventId == e.id && s.workerId == w.id && s.id != shiftId &&
         (s.status == ShiftStatus.assigned || s.status == ShiftStatus.released))) {
       return 'This person already has a position at this event.';
@@ -625,40 +628,6 @@ abstract class _DemoCore implements WorkforceRepository {
   Future<void> saveReportTargets(AppSession session, ReportTargets targets) => _delay(() {
         _requirePerm('manage_settings');
         _reportTargets = targets;
-      });
-
-  @override
-  Future<List<WorkerRating>> loadWorkerRatings(AppSession session) => _delay(() {
-        _requirePerm('view_workers');
-        return [..._ratings]..sort((a, b) => b.ratedAt.compareTo(a.ratedAt));
-      });
-
-  @override
-  Future<void> rateWorker(AppSession session, {required String workerId, String? eventId, required int stars, String note = ''}) => _delay(() {
-        _requirePerm('manage_workers');
-        if (!isValidStars(stars)) throw const AppFailure('Stars run from 1 to 5');
-        if (!_workers.containsKey(workerId)) throw const AppFailure('Staff member not found');
-        _ratings.add(WorkerRating(id: _id(), workerId: workerId, eventId: eventId, stars: stars, note: note.trim(), ratedAt: DateTime.now().toUtc()));
-      });
-
-  @override
-  Future<Map<String, String>> loadRehireFlags(AppSession session) => _delay(() {
-        _requirePerm('view_workers');
-        return Map.of(_rehireFlags);
-      });
-
-  @override
-  Future<void> flagDoNotRehire(AppSession session, String workerId, String reason) => _delay(() {
-        _requirePerm('manage_workers');
-        if (reason.trim().isEmpty) throw const AppFailure('Give a reason');
-        if (!_workers.containsKey(workerId)) throw const AppFailure('Staff member not found');
-        _rehireFlags[workerId] = reason.trim();
-      });
-
-  @override
-  Future<void> clearDoNotRehire(AppSession session, String workerId) => _delay(() {
-        _requirePerm('manage_workers');
-        _rehireFlags.remove(workerId);
       });
 
   // ---- Pay ----
@@ -933,7 +902,9 @@ abstract class _DemoCore implements WorkforceRepository {
 
 /// The demo backend: the core above plus each Phase 3 area, in its own part file.
 class DemoWorkforceRepository extends _DemoCore with _DemoShiftMarket, _DemoComms, _DemoPeople, _DemoReports, _DemoPerformance, _DemoOperations {
-  DemoWorkforceRepository({super.now});
+  DemoWorkforceRepository({super.now}) {
+    _seedPerformanceDemo();
+  }
 
   static const personas = _DemoCore.personas;
   static String kioskPinFor(Worker w) => _DemoCore.kioskPinFor(w);

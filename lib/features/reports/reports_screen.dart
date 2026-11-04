@@ -9,29 +9,57 @@ import '../../core/theme/app_theme.dart';
 import '../../core/time/venue_time.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
+import '../../data/performance_repository.dart';
 import '../pay/pay_logic.dart' show money;
 import 'reports_labor.dart';
 
-Tone kpiTone(KpiBand? band) => switch (band) {
-      KpiBand.green => Tone.good,
-      KpiBand.yellow => Tone.warn,
-      KpiBand.red => Tone.bad,
-      null => Tone.idle,
+Tone ragTone(Rag rag) => switch (rag) {
+      Rag.green => Tone.good,
+      Rag.yellow => Tone.warn,
+      Rag.red => Tone.bad,
+      Rag.none => Tone.idle,
     };
 
-/// Reliability bands: 90% on time is green, 80% yellow.
-const reliabilityTarget = KpiTarget(green: 0.9, yellow: 0.8);
+/// Event numbers added up for one season.
+class SeasonTotals {
+  SeasonTotals(this.season);
 
-Tone _budgetTone(BudgetStatus s) => switch (s) {
-      BudgetStatus.under => Tone.good,
-      BudgetStatus.near => Tone.warn,
-      BudgetStatus.over => Tone.bad,
-    };
+  final Season season;
+  int events = 0;
+  int needed = 0;
+  int assigned = 0;
+  int attended = 0;
+  int late = 0;
+  int noShows = 0;
+  int? laborCostCents;
+  int? budgetCents;
 
-String _budgetLabel(BudgetStatus s) => switch (s) {
-      BudgetStatus.under => 'on track',
-      BudgetStatus.near => 'near limit',
-      BudgetStatus.over => 'over',
+  double? get fillRate => needed == 0 ? null : assigned / needed;
+  double? get attendanceRate => assigned == 0 ? null : attended / assigned;
+}
+
+/// Event KPIs added up by season, newest first.
+List<SeasonTotals> seasonTotals(Iterable<(DateTime localStart, EventKpis kpis)> rows, {int startMonth = Season.defaultStartMonth}) {
+  final bySeason = <Season, SeasonTotals>{};
+  for (final (start, k) in rows) {
+    final s = bySeason.putIfAbsent(Season.of(start, startMonth: startMonth), () => SeasonTotals(Season.of(start, startMonth: startMonth)));
+    s.events++;
+    s.needed += k.needed;
+    s.assigned += k.assigned;
+    s.attended += k.attended;
+    s.late += k.late;
+    s.noShows += k.noShows;
+    if (k.laborCostCents != null) s.laborCostCents = (s.laborCostCents ?? 0) + k.laborCostCents!;
+    if (k.budgetCents != null) s.budgetCents = (s.budgetCents ?? 0) + k.budgetCents!;
+  }
+  return bySeason.values.toList()..sort((a, b) => b.season.compareTo(a.season));
+}
+
+String _budgetLabel(Rag rag) => switch (rag) {
+      Rag.green => 'on track',
+      Rag.yellow => 'near limit',
+      Rag.red => 'over',
+      Rag.none => 'no budget',
     };
 
 String _percent(double? v) => v == null ? '—' : '${(v * 100).round()}%';
@@ -52,10 +80,8 @@ class ReportsData {
   const ReportsData({
     required this.events,
     required this.localStarts,
-    required this.outcomes,
+    required this.performance,
     required this.workerNames,
-    required this.averageStars,
-    required this.rehireFlags,
   });
 
   /// One per finished or live event.
@@ -64,17 +90,11 @@ class ReportsData {
   /// Local start date of each event, by event id.
   final Map<String, DateTime> localStarts;
 
-  /// One entry per person and event they were scheduled for.
-  final List<ShiftOutcome> outcomes;
+  /// Outcomes, ratings and do-not-rehire flags; null when the viewer cannot see staff.
+  final PerformanceData? performance;
 
-  /// Names of the people in [outcomes]; empty when the viewer cannot see staff.
+  /// Names of the people in [performance]; empty when the viewer cannot see staff.
   final Map<String, String> workerNames;
-
-  /// Average stars by person; people with no ratings are missing.
-  final Map<String, double> averageStars;
-
-  /// Reason by person for those flagged do-not-rehire.
-  final Map<String, String> rehireFlags;
 }
 
 final reportsDataProvider = FutureProvider.autoDispose<ReportsData>((ref) async {
@@ -96,9 +116,7 @@ final reportsDataProvider = FutureProvider.autoDispose<ReportsData>((ref) async 
     labor = await laborCostByEvent(repo: repo, session: session, venue: venue, setup: setup, events: done);
   }
 
-  final now = DateTime.now().toUtc();
   final kpis = <EventKpis>[];
-  final outcomes = <ShiftOutcome>[];
   final localStarts = <String, DateTime>{};
   for (final b in boards) {
     final id = b.event.id;
@@ -111,33 +129,19 @@ final reportsDataProvider = FutureProvider.autoDispose<ReportsData>((ref) async 
       attendance: session.rules.attendance,
       labor: labor[id],
     ));
-    outcomes.addAll(attendanceOutcomes(
-      shifts: b.shifts,
-      punches: b.punches,
-      changes: b.changes,
-      rules: session.rules.attendance,
-      now: now,
-    ));
   }
 
+  // Outcomes, ratings and flags come from the performance area, which keeps one
+  // definition of what counts as on time, a no-show or a call-off.
   final names = <String, String>{};
-  var averages = <String, double>{};
-  var flags = <String, String>{};
+  PerformanceData? performance;
   if (session.canVenueWide(Perm.viewWorkers)) {
     for (final w in await repo.listWorkers(session)) {
       names[w.id] = w.displayName;
     }
-    averages = averageRatings(await repo.loadWorkerRatings(session));
-    flags = await repo.loadRehireFlags(session);
+    performance = await (repo as PerformanceRepository).loadPerformance(session);
   }
-  return ReportsData(
-    events: kpis,
-    localStarts: localStarts,
-    outcomes: outcomes,
-    workerNames: names,
-    averageStars: averages,
-    rehireFlags: flags,
-  );
+  return ReportsData(events: kpis, localStarts: localStarts, performance: performance, workerNames: names);
 });
 
 enum _ReportView { events, seasons, people }
@@ -245,29 +249,42 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
 
   List<Widget> _seasonRows(ReportsData d, ReportTargets targets) {
     if (d.events.isEmpty) return [const EmptyNote('No finished or live events yet.')];
-    final seasons = seasonSummaries([
-      for (final k in d.events)
-        if (d.localStarts[k.eventId] != null) (d.localStarts[k.eventId]!, k),
-    ]);
+    final seasons = seasonTotals(
+      [
+        for (final k in d.events)
+          if (d.localStarts[k.eventId] != null) (d.localStarts[k.eventId]!, k),
+      ],
+      startMonth: Season.startMonthFrom(ref.read(sessionProvider)!.venue.settings),
+    );
     return [
-      for (final s in seasons) _SeasonTile(summary: s, targets: targets),
+      for (final s in seasons) _SeasonTile(totals: s, targets: targets),
     ];
   }
 
   List<Widget> _peopleRows(ReportsData d) {
-    if (d.outcomes.isEmpty) return [const EmptyNote('No assigned shifts yet.')];
+    final p = d.performance;
+    if (p == null) return [const EmptyNote('You cannot see staff records.')];
+    if (p.outcomes.isEmpty) return [const EmptyNote('No assigned shifts yet.')];
     final canManage = ref.read(sessionProvider)!.canVenueWide(Perm.manageWorkers);
-    final people = reliabilityOf(d.outcomes)
-        .where((r) => r.expected > 0)
-        .toList()
-      ..sort((a, b) => a.score!.compareTo(b.score!));
+    final stars = <String, (int sum, int count)>{};
+    for (final r in p.ratings) {
+      final s = stars[r.workerId] ?? (0, 0);
+      stars[r.workerId] = (s.$1 + r.stars, s.$2 + 1);
+    }
+    double? avgStars(String id) {
+      final s = stars[id];
+      return s == null ? null : s.$1 / s.$2;
+    }
+    // Lowest scores first, then people with too few events to score.
+    final people = [for (final id in {for (final o in p.outcomes) o.workerId}) reliabilityOf(id, p.outcomes, rules: p.rules, now: p.now)]
+      ..sort((a, b) => (a.score ?? 101).compareTo(b.score ?? 101));
     return [
       for (final r in people)
         _ReliabilityTile(
           record: r,
           name: d.workerNames[r.workerId] ?? 'Staff member',
-          stars: d.averageStars[r.workerId],
-          rehireBlockReason: d.rehireFlags[r.workerId],
+          stars: avgStars(r.workerId),
+          rehireBlockReason: p.flags[r.workerId]?.reason,
           canManage: canManage,
           onRate: () => _rate(r.workerId),
           onFlag: () => _flag(r.workerId),
@@ -276,12 +293,14 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     ];
   }
 
+  PerformanceRepository get _performance => ref.read(repositoryProvider) as PerformanceRepository;
+
   Future<void> _rate(String workerId) async {
     final session = ref.read(sessionProvider)!;
     final chosen = await showDialog<(int, String)>(context: context, builder: (_) => const _RateDialog());
     if (chosen == null) return;
     try {
-      await ref.read(repositoryProvider).rateWorker(session, workerId: workerId, stars: chosen.$1, note: chosen.$2);
+      await _performance.addRating(session, workerId, stars: chosen.$1, note: chosen.$2);
       ref.invalidate(reportsDataProvider);
       if (mounted) showMessage(context, 'Rating saved');
     } on AppFailure catch (e) {
@@ -301,7 +320,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
     );
     if (reason == null || reason.trim().isEmpty) return;
     try {
-      await ref.read(repositoryProvider).flagDoNotRehire(session, workerId, reason);
+      await _performance.setDoNotRehire(session, workerId, reason);
       ref.invalidate(reportsDataProvider);
       if (mounted) showMessage(context, 'Flagged do not rehire');
     } on AppFailure catch (e) {
@@ -312,7 +331,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   Future<void> _clearFlag(String workerId) async {
     final session = ref.read(sessionProvider)!;
     try {
-      await ref.read(repositoryProvider).clearDoNotRehire(session, workerId);
+      await _performance.clearDoNotRehire(session, workerId);
       ref.invalidate(reportsDataProvider);
       if (mounted) showMessage(context, 'Flag cleared');
     } on AppFailure catch (e) {
@@ -411,11 +430,14 @@ class _TargetsDialogState extends State<_TargetsDialog> {
     final fy = _read(_fillYellow);
     final ag = _read(_attGreen);
     final ay = _read(_attYellow);
-    final t = (fg == null || fy == null || ag == null || ay == null)
-        ? null
-        : ReportTargets.tryCreate(fillGreen: fg, fillYellow: fy, attendanceGreen: ag, attendanceYellow: ay);
-    if (t == null) {
-      setState(() => _error = 'Enter percentages. Yellow must be at or below green.');
+    if (fg == null || fy == null || ag == null || ay == null) {
+      setState(() => _error = 'Enter each target as a percentage.');
+      return;
+    }
+    final t = widget.current.copyWith(fillGreen: fg, fillYellow: fy, attendanceGreen: ag, attendanceYellow: ay);
+    final problem = t.validate();
+    if (problem != null) {
+      setState(() => _error = problem);
       return;
     }
     Navigator.of(context).pop(t);
@@ -459,8 +481,8 @@ class _EventKpiTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fillBand = targets.fill.band(kpis.fillRate);
-    final attBand = targets.attendance.band(kpis.attendanceRate);
+    final fillRag = targets.fill(kpis.fillRate);
+    final attRag = targets.attendance(kpis.attendanceRate);
     final mix = kpis.staffingMix.entries.map((e) => '${e.value} ${e.key}').join(', ');
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen, vertical: 6),
@@ -483,9 +505,11 @@ class _EventKpiTile extends StatelessWidget {
             ),
           const SizedBox(height: 6),
           Wrap(spacing: 6, runSpacing: 6, children: [
-            StatusTag('Fill ${_percent(kpis.fillRate)}', kpiTone(fillBand)),
-            StatusTag('Attendance ${_percent(kpis.attendanceRate)}', kpiTone(attBand)),
-            if (kpis.budgetStatus != null) StatusTag('Budget ${_budgetLabel(kpis.budgetStatus!)}', _budgetTone(kpis.budgetStatus!)),
+            StatusTag('Fill ${_percent(kpis.fillRate)}', ragTone(fillRag)),
+            StatusTag('Attendance ${_percent(kpis.attendanceRate)}', ragTone(attRag)),
+            if (kpis.laborCostCents != null && kpis.budgetCents != null)
+              StatusTag('Budget ${_budgetLabel(targets.budget(kpis.laborCostCents!, kpis.budgetCents))}',
+                  ragTone(targets.budget(kpis.laborCostCents!, kpis.budgetCents))),
           ]),
         ],
       ),
@@ -494,18 +518,18 @@ class _EventKpiTile extends StatelessWidget {
 }
 
 class _SeasonTile extends StatelessWidget {
-  const _SeasonTile({required this.summary, required this.targets});
+  const _SeasonTile({required this.totals, required this.targets});
 
-  final SeasonSummary summary;
+  final SeasonTotals totals;
   final ReportTargets targets;
 
   @override
   Widget build(BuildContext context) {
-    final s = summary;
+    final s = totals;
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen, vertical: 6),
       isThreeLine: true,
-      title: Text('Season ${s.label}'),
+      title: Text('Season ${s.season.label}'),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -520,8 +544,8 @@ class _SeasonTile extends StatelessWidget {
             ),
           const SizedBox(height: 6),
           Wrap(spacing: 6, runSpacing: 6, children: [
-            StatusTag('Fill ${_percent(s.fillRate)}', kpiTone(targets.fill.band(s.fillRate))),
-            StatusTag('Attendance ${_percent(s.attendanceRate)}', kpiTone(targets.attendance.band(s.attendanceRate))),
+            StatusTag('Fill ${_percent(s.fillRate)}', ragTone(targets.fill(s.fillRate))),
+            StatusTag('Attendance ${_percent(s.attendanceRate)}', ragTone(targets.attendance(s.attendanceRate))),
           ]),
         ],
       ),
@@ -541,7 +565,7 @@ class _ReliabilityTile extends StatelessWidget {
     required this.onClear,
   });
 
-  final Reliability record;
+  final ReliabilityScore record;
   final String name;
   final double? stars;
   final String? rehireBlockReason;
@@ -561,17 +585,17 @@ class _ReliabilityTile extends StatelessWidget {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '${r.expected} shifts · On time ${r.onTime} · Late ${r.late} · No-shows ${r.noShows} · Call-offs ${r.callOffs}'
-            '${stars == null ? '' : ' · ${stars!.toStringAsFixed(1)} stars'}',
-          ),
+          Text('${r.breakdown}${stars == null ? '' : ' · ${stars!.toStringAsFixed(1)} stars'}'),
           if (flagged) Text('Do not rehire: ${rehireBlockReason!}', style: AppText.meta),
         ],
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          StatusTag(_percent(r.score), kpiTone(reliabilityTarget.band(r.score))),
+          StatusTag(
+            r.score == null ? 'New' : '${r.score}',
+            r.score == null ? Tone.idle : ragTone(rateRag(r.score! / 100, green: 0.9, yellow: 0.8)),
+          ),
           if (canManage)
             PopupMenuButton<String>(
               onSelected: (v) => switch (v) {
