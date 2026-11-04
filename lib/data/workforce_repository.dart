@@ -76,6 +76,13 @@ abstract class WorkforceRepository {
   Future<void> saveNpoPayout(NpoPayout payout);
   Future<void> setNpoPayoutStatus(String payoutId, String status, {String reference = ''});
 
+  // ---- Reports and performance ----
+  // Report targets live on ReportsRepository.
+
+  /// People flagged do-not-rehire, with the reason for each. Needs view_workers.
+  /// Ratings and setting the flag live on [PerformanceRepository].
+  Future<Map<String, String>> loadRehireFlags(AppSession session);
+
   // ---- Kiosk ----
   Future<KioskIdentity> kioskIdentify(String pin);
   Future<void> kioskPunch(String pin, PunchDraft draft, {Uint8List? photo});

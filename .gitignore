@@ -51,3 +51,5 @@ app.*.map.json
 supabase/seed/*.sql
 packages/workforce_core/.dart_tool/
 packages/workforce_core/pubspec.lock
+
+supabase/.temp/

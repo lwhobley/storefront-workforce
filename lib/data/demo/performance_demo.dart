@@ -306,6 +306,13 @@ mixin _DemoPerformance on _DemoCore implements PerformanceRepository {
         _requirePerm(Perm.manageWorkers);
         _perfFlags.remove(workerId);
       });
+
+  /// Reasons by person, for the assign sheet's do-not-rehire block.
+  @override
+  Future<Map<String, String>> loadRehireFlags(AppSession session) => _delay(() {
+        _requirePerm(Perm.viewWorkers);
+        return {for (final e in _perfFlags.entries) e.key: e.value.reason};
+      });
 }
 
 /// A small seeded random source (the demo library does not import dart:math), so the

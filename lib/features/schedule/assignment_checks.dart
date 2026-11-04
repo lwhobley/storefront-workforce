@@ -31,11 +31,17 @@ AssignmentCheck checkAssignment({
   required VenueRules rules,
   required String timeZone,
   required String Function(String code) certName,
+  /// The reason, when the person is flagged do-not-rehire. Blocks the assignment.
+  String? doNotRehireReason,
 }) {
   final blocks = <CheckItem>[];
   final warnings = <CheckItem>[];
   final age = candidate.ageOnEvent;
   final day = localDateOf(event.callTime, timeZone);
+
+  if (doNotRehireReason != null) {
+    blocks.add(CheckItem('do_not_rehire', 'Flagged do not rehire: $doNotRehireReason'));
+  }
 
   final minAge = meetsMinimumAge(role, age);
   if (minAge.status == MinimumAgeStatus.notMet) {

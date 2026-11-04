@@ -10,6 +10,7 @@ import 'models.dart';
 // Used by the Phase 3 part files.
 // ignore: unused_import
 import 'app_notification.dart';
+import 'admin_repository.dart';
 import 'comms_repository.dart';
 import 'pay_data.dart';
 import 'operations_repository.dart';
@@ -25,6 +26,7 @@ part 'supabase/operations_supabase.dart';
 part 'supabase/performance_supabase.dart';
 part 'supabase/reports_supabase.dart';
 part 'supabase/shift_market_supabase.dart';
+part 'supabase/admin_supabase.dart';
 
 /// Event columns the app reads. Listed (not `*`) because events.labor_budget is pay
 /// information: 0023 makes it unreadable from the table, and pay viewers get budgets
@@ -81,13 +83,18 @@ abstract class _SupabaseCore implements WorkforceRepository {
         return session;
       });
 
+  /// The venue chosen with [switchVenue], so a person in more than one venue stays where
+  /// they were instead of landing on whichever row comes back first.
+  String? _chosenVenueId;
+
   @override
   Future<AppSession?> restoreSession() async {
     final user = client.auth.currentUser;
     if (user == null) return null;
     final memberships = await client.from('venue_memberships').select('venue_id').eq('user_id', user.id).eq('status', 'active');
     if (memberships.isEmpty) return null;
-    final venueId = memberships.first['venue_id'] as String;
+    final ids = [for (final m in memberships) m['venue_id'] as String];
+    final venueId = ids.contains(_chosenVenueId) ? _chosenVenueId! : ids.first;
     final venueRow = await client.from('venues').select().eq('id', venueId).single();
     final profile = await client.from('user_profiles').select().eq('id', user.id).maybeSingle();
     final roles = await client.from('venue_roles').select('code, permissions').eq('venue_id', venueId);
@@ -116,7 +123,10 @@ abstract class _SupabaseCore implements WorkforceRepository {
   }
 
   @override
-  Future<void> signOut() => client.auth.signOut();
+  Future<void> signOut() {
+    _chosenVenueId = null;
+    return client.auth.signOut();
+  }
 
   // ---- Venue ----
 
@@ -209,6 +219,12 @@ abstract class _SupabaseCore implements WorkforceRepository {
             .select(eventReadColumns)
             .single();
         return Event.fromJson(row);
+      });
+
+  @override
+  Future<Map<String, String>> loadRehireFlags(AppSession session) => _guard(() async {
+        final rows = await client.from('rehire_flags').select('worker_id, reason').eq('venue_id', session.venue.id);
+        return {for (final r in rows) r['worker_id'] as String: r['reason'] as String};
       });
 
   @override
@@ -582,6 +598,7 @@ abstract class _SupabaseCore implements WorkforceRepository {
 }
 
 /// The Supabase backend: the core above plus each Phase 3 area, in its own part file.
-class SupabaseWorkforceRepository extends _SupabaseCore with _SupabaseShiftMarket, _SupabaseComms, _SupabasePeople, _SupabaseReports, _SupabasePerformance, _SupabaseOperations {
+class SupabaseWorkforceRepository extends _SupabaseCore with _SupabaseShiftMarket, _SupabaseComms, _SupabasePeople, _SupabaseReports, _SupabasePerformance, _SupabaseOperations, _SupabaseAdmin {
   SupabaseWorkforceRepository(super.client);
 }
+
