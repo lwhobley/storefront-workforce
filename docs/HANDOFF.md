@@ -89,12 +89,12 @@ see it on the board).
 
 ## Backend state (live Supabase project)
 
-- **Migrations applied: 0001–0017.** 0011–0014 (Phase 3) match this repo function for
+- **Migrations applied: 0001–0018.** 0011–0014 (Phase 3) match this repo function for
   function. **0015–0017** (report targets, ratings, do-not-rehire) were applied from
   another working copy whose app code is not on GitHub yet; the SQL was copied into this
   repo from the live project's migration history, and 0017 was checked to match the live
-  function exactly. **0018** (partner privacy, card review) is the only one not yet
-  applied. It builds on 0017's `assignment_block_reason`, keeping the do-not-rehire check.
+  function exactly. **0018** (partner privacy, card review) was applied November 4 and
+  builds on 0017's `assignment_block_reason`, keeping the do-not-rehire check.
 - **Two working copies:** whoever pushes the Phase 4 app code must rebase onto `main` and
   keep these migration numbers. New migrations start at 0019.
 - **Edge functions deployed:** `pin-login`, `kiosk-punch`, `staff-admin`, `event-sync`.
@@ -139,7 +139,7 @@ see it on the board).
 ## Next steps, in order
 
 1. Decide the onboarding backfill and write the real onboarding documents (see Phase 3 notes).
-2. Apply migration 0018 to the live project if not yet done. Deploy `notify-dispatch` once
+2. Apply the review fixes (0019, 0020) to the live project. Deploy `notify-dispatch` once
    secrets exist. Smoke-test the connected app with the sample PINs.
 3. Push registration in the app: add `firebase_messaging`, register tokens with
    `registerPushToken`, and wire the `unreadCountProvider` badge in the nav.
