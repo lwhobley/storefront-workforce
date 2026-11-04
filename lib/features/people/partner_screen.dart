@@ -112,6 +112,12 @@ Widget _switcher(List<(String, String)> options, String current, ValueChanged<St
         onChanged: (v) => v == null ? null : onChanged(v),
       );
 
+/// Two summary tiles per row on phones, 180 wide otherwise.
+double _tileWidth(BuildContext context) {
+  final w = (MediaQuery.sizeOf(context).width - 2 * (AppSpace.screen - 4)) / 2;
+  return w < 180 ? w.floorToDouble() : 180;
+}
+
 String _eventLine(Event e, String zone) => '${DateFormat('EEE MMM d').format(atVenue(e.startTime, zone))} · ${e.name}';
 
 /// Upcoming shifts grouped by event.
@@ -272,7 +278,7 @@ class _NpoView extends ConsumerWidget {
                 ('Pending review', money(sum('pending')), Tone.idle),
                 ('Hours paid for', formatHundredths(p.fold(0, (s, x) => s + x.hoursHundredths)), null),
               ])
-                SizedBox(width: 180, child: StatTile(label: label, value: value, tone: tone)),
+                SizedBox(width: _tileWidth(context), child: StatTile(label: label, value: value, tone: tone)),
             ]),
           ),
           Padding(
@@ -378,8 +384,8 @@ class _AgencyView extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(AppSpace.screen - 4, AppSpace.m, AppSpace.screen - 4, 0),
             child: Wrap(children: [
-              SizedBox(width: 180, child: StatTile(label: 'Billable this season', value: money(total), tone: Tone.info)),
-              SizedBox(width: 180, child: StatTile(label: 'Hours', value: decimalHours(billing.fold(0, (s, b) => s + b.minutes)))),
+              SizedBox(width: _tileWidth(context), child: StatTile(label: 'Billable this season', value: money(total), tone: Tone.info)),
+              SizedBox(width: _tileWidth(context), child: StatTile(label: 'Hours', value: decimalHours(billing.fold(0, (s, b) => s + b.minutes)))),
             ]),
           ),
           SectionHeading('Your bill rates'),

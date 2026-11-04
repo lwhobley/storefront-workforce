@@ -94,6 +94,8 @@ abstract class _DemoCore implements WorkforceRepository {
     DemoPersona('400004', 'Employee', 'Own schedule and clock-in'),
     DemoPersona('400005', 'Empleado (español)', 'Employee who prefers Spanish'),
     DemoPersona('500005', 'Kiosk', 'Shared clock-in tablet'),
+    DemoPersona('600006', 'NPO Coordinator', 'Own group: members, hours, payouts'),
+    DemoPersona('700007', 'Agency Contact', 'Own temps: schedule, hours, billing'),
   ];
 
   /// In the demo, a kiosk PIN is 90 followed by the 4 digits of the employee number

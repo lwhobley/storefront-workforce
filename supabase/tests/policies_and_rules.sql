@@ -167,7 +167,7 @@ select pg_temp.expect((select count(*) from audit_logs where entity = 'shifts' a
 
 -- ---- Agency contact ---------------------------------------------------------
 select pg_temp.as_user('00000000-0000-0000-0000-000000000004');
-select pg_temp.expect((select count(*) from workers) = 1 and (select employee_number from workers) = 'T2001', 'agency contact sees only their placed worker');
+select pg_temp.expect((select count(*) from workers) = 0, 'agency contact cannot read staff records directly (portal only)');
 select pg_temp.expect((select count(*) from shifts) = 1, 'agency contact sees only their worker''s shift');
 
 -- ---- Punches: idempotent, own only --------------------------------------------

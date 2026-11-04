@@ -610,7 +610,7 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
       final ok = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text('Update ${p.updateCount} people already on file?'),
+          title: Text('Update ${p.updateCount == 1 ? 'one person' : '${p.updateCount} people'} already on file?'),
           content: const Text('Their names, type, contact details, birth date, roles, agency or group, Paycom code and hire date are replaced with the file\'s values.'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
@@ -693,7 +693,7 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
                     controlAffinity: ListTileControlAffinity.leading,
                     value: _update,
                     onChanged: (v) => setState(() => _update = v ?? false),
-                    title: Text('Update the ${p.updateCount} people already on file (matched by employee number)'),
+                    title: Text('Update the ${p.updateCount == 1 ? 'person' : '${p.updateCount} people'} already on file (matched by employee number)'),
                     subtitle: const Text('Unticked, they are left as they are.'),
                   ),
                 const SizedBox(height: 8),
@@ -706,7 +706,7 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
                         leading: Icon(r.valid ? (r.isUpdate ? Icons.sync : Icons.add_circle_outline) : Icons.error_outline,
                             color: r.valid ? (r.isUpdate ? AppColors.accent : AppColors.good) : AppColors.bad),
                         title: Text('Line ${r.line}: ${r.cells['employee_number'] ?? ''} ${r.name}'),
-                        subtitle: Text(r.valid ? (r.isUpdate ? 'Updates the person on file' : 'New ${r.person!.type.code}') : r.errors.join(' · '),
+                        subtitle: Text(r.valid ? (r.isUpdate ? 'Updates the person on file' : 'New ${workerTypeLabel(r.person!.type).toLowerCase()}') : r.errors.join(' · '),
                             style: TextStyle(color: r.valid ? null : AppColors.bad)),
                       ),
                   ]),

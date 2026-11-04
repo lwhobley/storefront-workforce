@@ -29,29 +29,40 @@ which shares the Flutter + Supabase stack and its look.
 |---|---|
 | 1. Event night basics | Done: schedule builder, live view with the CUTX concourse map, phone and kiosk clock-in (PIN + photo, offline), moves and early release, rules engine |
 | 2. Pay | Done: pay engine, time corrections, pay periods with approve/lock, Paycom entry sheet and CSV, tips, NPO payouts, agency invoices |
-| 3. Self-service and communication | **Communication done.** Shift self-service and onboarding/partner portals **in progress** (see below) |
+| 3. Self-service and communication | Done in code (shift trading and availability, messages and alerts, onboarding, partner portals, own hours and tips). Not yet applied to the live database |
 | 4. Performance and reports | Not started |
 | 5. Multi-venue admin | Not started (tenant isolation itself is built and tested) |
 
-### Phase 3 in progress at handoff
+### Phase 3 notes
 
-Three areas were built in parallel, each in its own files (see "Code map").
+All three areas are built and tested (each in its own files; see "Code map").
 
-- **Communication (done):** messages and alerts, announcements and policy
-  acknowledgments, inbox, scheduled reminders, and the `notify-dispatch` function
-  (push via FCM, opt-in email via Resend).
-- **Shifts (in progress):** open shifts, pickups, drops, swaps, availability, the
-  manager Requests queue, and availability in the schedule builder. Migration
-  `0012_shift_market.sql`, tests `supabase/tests/shift_market.sql`,
-  `test/shift_market_test.dart`.
-- **People (in progress):** onboarding steps and tracker, Add person, roster CSV import,
-  NPO coordinator and agency contact portals, and employees' own hours and tips.
-  Migration `0014_onboarding_partners.sql`, tests `supabase/tests/people.sql`.
+- **Communication:** messages and alerts, announcements and policy acknowledgments,
+  inbox, scheduled reminders, and the `notify-dispatch` function (push via FCM, opt-in
+  email via Resend). Migration 0013.
+- **Shifts:** open shifts, pickups, drops (24-hour cutoff, reason required), swaps to a
+  coworker who accepts in the app, availability per event and date ranges off, the
+  manager Requests queue (shows the rules check; approving over warnings needs a note),
+  and availability tags in the schedule builder. Settings live in
+  `venues.settings.self_service`, with no editing screen yet (Phase 5). Migration 0012.
+- **People:** onboarding checklist per worker type (documents signed by typed name,
+  card photos reviewed by a manager, training items, Paycom done), the onboarding
+  board, Add person, roster CSV import with checks, the NPO coordinator and agency
+  contact portals, and employees' own hours and tips (no wages). Migration 0014.
+- **Fixes in 0015:** agency and NPO contacts no longer read staff records directly
+  (only through their portal, so no birth dates), and an uploaded card photo does not
+  count for scheduling until a manager verifies it.
 
-What is on `main` builds and passes every test, but shifts and people may still have
-placeholder or partial screens. Before calling Phase 3 done: open `/schedule`,
-`/requests`, `/me`, `/onboarding`, `/partner` and `/staff` in demo mode, finish what is
-missing, and run the full test suites.
+Before applying 0014 to the live project, decide:
+- **Backfill:** existing staff will show "not finished" because nobody has onboarding
+  records yet. Mark returning staff complete, or let them work through it.
+- **Documents:** the seeded documents are inactive drafts. The venue writes the real
+  text, and counsel reviews the volunteer waiver. Confirm that a typed name is enough as
+  a signature (including a parent's for a minor) and that a home address may be kept.
+
+Not done yet: no roster file picker on phones (people paste the CSV), documents are text
+only (no PDF upload), and managers are not notified when a card photo is uploaded (they
+see it on the board).
 
 ## Decisions the venue made (do not reverse without asking)
 
@@ -79,9 +90,9 @@ missing, and run the full test suites.
 ## Backend state (live Supabase project)
 
 - **Migrations applied: 0001–0010.** Not yet applied: **0011** (hide wages, shared
-  notifications), **0012** (shifts), **0013** (communication), **0014** (people). The
+  notifications), **0012** (shifts), **0013** (communication), **0014** (people), **0015** (privacy fixes). The
   web app on `main` already calls their functions, so **the connected app's new
-  Phase 3 screens fail until 0011–0014 are applied.** Demo mode (`?demo`) works now.
+  Phase 3 screens fail until 0011–0015 are applied.** Demo mode (`?demo`) works now.
 - **Edge functions deployed:** `pin-login`, `kiosk-punch`, `staff-admin`, `event-sync`.
   Not deployed: `notify-dispatch`. `setup-sql` is a disabled loader (returns 410) and
   can be deleted.
@@ -123,8 +134,8 @@ missing, and run the full test suites.
 
 ## Next steps, in order
 
-1. Finish and verify Phase 3 shifts and people (see above). Commit.
-2. Apply migrations 0011–0014 to the live project. Deploy `notify-dispatch` once
+1. Decide the onboarding backfill and write the real onboarding documents (see Phase 3 notes).
+2. Apply migrations 0011–0015 to the live project. Deploy `notify-dispatch` once
    secrets exist. Smoke-test the connected app with the sample PINs.
 3. Push registration in the app: add `firebase_messaging`, register tokens with
    `registerPushToken`, and wire the `unreadCountProvider` badge in the nav.
@@ -138,7 +149,7 @@ missing, and run the full test suites.
 ```bash
 export PATH=/opt/sdk/flutter/bin:$PATH        # in the cloud container; locally use your Flutter
 flutter analyze                                # must say "No issues found!" (CI treats warnings as failures)
-flutter test
+flutter test                                   # 42 tests
 (cd packages/workforce_core && dart test)
 supabase/tests/run_local.sh                    # needs a local Postgres; runs every supabase/tests/*.sql
 deno test --allow-env supabase/functions       # PIN helpers and notify-dispatch helpers
@@ -148,7 +159,7 @@ UI checks: `flutter build web --release --no-web-resources-cdn`, serve `build/we
 drive it with Playwright. Flutter draws to a canvas, so click by coordinates. Type the
 PIN on the keyboard about 3 seconds after load. Demo PINs: 100001 Admin, 200002
 Concessions Manager, 300003 Storefront Lead, 400004 Employee, 400005 Empleado,
-500005 Kiosk.
+500005 Kiosk, 600006 NPO Coordinator, 700007 Agency Contact.
 
 ## Code map
 
@@ -163,7 +174,7 @@ packages/workforce_core/
   lib/src/pay/      pay engine (earnings, tips, NPO, agency, pay periods, Paycom export)
   lib/src/layout/   CUTX plan geometry (from Premium Command)
   lib/src/sample/   sample arena and sample pay setup
-supabase/migrations 0001–0014;  supabase/tests;  supabase/functions
+supabase/migrations 0001–0015;  supabase/tests;  supabase/functions
 ```
 
 ## Gotchas learned the hard way

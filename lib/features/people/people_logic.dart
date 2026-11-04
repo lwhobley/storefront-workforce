@@ -231,7 +231,11 @@ List<AgencyPeriodBilling> agencyBillingByPeriod(
     );
     final lines = result.invoice(d.agencyId)?.lines ?? const <AgencyInvoiceLine>[];
     if (lines.isEmpty) continue;
-    out.add(AgencyPeriodBilling(period: p, lines: lines, problems: result.problems));
+    final problems = [
+      for (final x in result.problems)
+        if (x.workDate == null || (!x.workDate!.isBefore(start) && !x.workDate!.isAfter(end))) x,
+    ];
+    out.add(AgencyPeriodBilling(period: p, lines: lines, problems: problems));
   }
   return out;
 }

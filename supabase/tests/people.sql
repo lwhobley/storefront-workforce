@@ -206,6 +206,9 @@ select pg_temp.expect((select count(*) from worker_certifications where cert_typ
 select pg_temp.expect((pg_temp.step(my_onboarding(), 'certifications') ->> 'status') = 'submitted'
    and (my_onboarding() ->> 'needs_review')::boolean, 'the upload waits for a manager');
 select pg_temp.expect((select count(*) from onboarding_progress) = 3, 'the employee reads only their own progress');
+select pg_temp.as_owner();
+select pg_temp.expect(not (rules_worker_json('00000000-0000-0000-0000-00000014c001', current_date) -> 'certifications' @> '[{"cert_type_code": "tabc"}]'),
+  'an unverified card upload does not count for scheduling');
 
 -- ---- Another employee cannot read it ----------------------------------------------
 select pg_temp.as_user('00000000-0000-0000-0000-000000001413');
@@ -232,6 +235,10 @@ select pg_temp.expect((pg_temp.step(worker_onboarding('00000000-0000-0000-0000-0
 select review_onboarding_step('00000000-0000-0000-0000-00000014c001', 'certifications', true, '');
 select pg_temp.expect((select verified_by = '00000000-0000-0000-0000-000000001411' from worker_certifications where cert_type_code = 'tabc'
    and worker_id = '00000000-0000-0000-0000-00000014c001'), 'approving verifies the card');
+select pg_temp.as_owner();
+select pg_temp.expect(rules_worker_json('00000000-0000-0000-0000-00000014c001', current_date) -> 'certifications' @> '[{"cert_type_code": "tabc"}]',
+  'once verified, the card counts for scheduling');
+select pg_temp.as_user('00000000-0000-0000-0000-000000001411');
 select pg_temp.expect((pg_temp.step(worker_onboarding('00000000-0000-0000-0000-00000014c001'), 'certifications') ->> 'done')::boolean,
   'the card step is done');
 select complete_onboarding_step('00000000-0000-0000-0000-00000014c001', 'training', '{"items": ["cash_handling", "emergency_exits"]}');
@@ -317,6 +324,7 @@ select pg_temp.expect((select bool_and(x ->> 'worker_id' = '00000000-0000-0000-0
 select pg_temp.expect((select count(*) = 2 from npo, jsonb_array_elements(r -> 'shifts') x), 'past and upcoming shifts of their members');
 select pg_temp.expect_error($$select npo_portal('2026-08-01', current_date, '00000000-0000-0000-0000-0000001414d2')$$, 'another group is refused');
 select pg_temp.expect_error($$select agency_portal('2026-08-01', current_date)$$, 'a coordinator has no agency portal');
+select pg_temp.expect((select count(*) from workers) = 0, 'a coordinator cannot read staff records directly (birth dates stay hidden)');
 
 -- ---- Agency contact portal -----------------------------------------------------------
 select pg_temp.as_user('00000000-0000-0000-0000-000000001415');
