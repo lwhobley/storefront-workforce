@@ -5,8 +5,16 @@ import 'package:workforce_core/workforce_core.dart';
 
 import '../core/time/venue_time.dart';
 import 'models.dart';
+import 'app_notification.dart';
+import 'comms_repository.dart';
 import 'pay_data.dart';
+import 'people_repository.dart';
+import 'shift_market_repository.dart';
 import 'workforce_repository.dart';
+
+part 'demo/comms_demo.dart';
+part 'demo/people_demo.dart';
+part 'demo/shift_market_demo.dart';
 
 /// A demo persona: a PIN that signs in as one role in the sample arena.
 class DemoPersona {
@@ -20,8 +28,8 @@ class DemoPersona {
 /// Runs the fictional Pecan Valley Arena in memory, with one game live right now. Every
 /// action works (assign, move, send home, clock in) and follows the same rules as the
 /// real database, but nothing is saved after the page closes.
-class DemoWorkforceRepository implements WorkforceRepository {
-  DemoWorkforceRepository({DateTime? now}) : _arena = SampleArena.generate(now: now ?? DateTime.now().toUtc()) {
+abstract class _DemoCore implements WorkforceRepository {
+  _DemoCore({DateTime? now}) : _arena = SampleArena.generate(now: now ?? DateTime.now().toUtc()) {
     _shifts = {for (final s in _arena.shifts) s.id: s};
     _punches = [..._arena.punches];
     _events = {for (final e in _arena.events) e.id: e};
@@ -46,6 +54,27 @@ class DemoWorkforceRepository implements WorkforceRepository {
   final Map<String, AppSession> _sessionsByPin = {};
   AppSession? _session;
   int _seq = 0;
+
+  /// In-app notifications by user id (the demo's stand-in for the notifications table).
+  final Map<String, List<AppNotification>> _notifications = {};
+
+  /// Queues a notification for a demo sign-in. Phase 3 features call this.
+  void _notifyUser(String? userId, {required String kind, required String title, String body = '', String link = ''}) {
+    if (userId == null) return;
+    _notifications.putIfAbsent(userId, () => []).insert(
+          0,
+          AppNotification(id: _id(), kind: kind, title: title, body: body, link: link, createdAt: DateTime.now().toUtc()),
+        );
+  }
+
+  /// Same, for a staff record: reaches the demo persona signed in as that person, if any.
+  // ignore: unused_element
+  void _notifyWorker(String? workerId, {required String kind, required String title, String body = '', String link = ''}) {
+    if (workerId == null) return;
+    for (final s in _sessionsByPin.values) {
+      if (s.workerId == workerId) _notifyUser(s.userId, kind: kind, title: title, body: body, link: link);
+    }
+  }
 
   // Pay (Phase 2), in memory.
   late final SamplePay _pay = SamplePay.generate(_arena);
@@ -841,4 +870,12 @@ class DemoWorkforceRepository implements WorkforceRepository {
     }
     return out;
   }
+}
+
+/// The demo backend: the core above plus each Phase 3 area, in its own part file.
+class DemoWorkforceRepository extends _DemoCore with _DemoShiftMarket, _DemoComms, _DemoPeople {
+  DemoWorkforceRepository({super.now});
+
+  static const personas = _DemoCore.personas;
+  static String kioskPinFor(Worker w) => _DemoCore.kioskPinFor(w);
 }

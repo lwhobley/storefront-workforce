@@ -7,13 +7,23 @@ import 'package:workforce_core/workforce_core.dart';
 
 import '../core/offline/device_id.dart';
 import 'models.dart';
+// Used by the Phase 3 part files.
+// ignore: unused_import
+import 'app_notification.dart';
+import 'comms_repository.dart';
 import 'pay_data.dart';
+import 'people_repository.dart';
+import 'shift_market_repository.dart';
 import 'workforce_repository.dart';
+
+part 'supabase/comms_supabase.dart';
+part 'supabase/people_supabase.dart';
+part 'supabase/shift_market_supabase.dart';
 
 /// The real backend. Every read goes through row level security, and every schedule
 /// change goes through a database function that checks scope and logs the change.
-class SupabaseWorkforceRepository implements WorkforceRepository {
-  SupabaseWorkforceRepository(this.client);
+abstract class _SupabaseCore implements WorkforceRepository {
+  _SupabaseCore(this.client);
 
   final SupabaseClient client;
 
@@ -557,4 +567,9 @@ class SupabaseWorkforceRepository implements WorkforceRepository {
           if (photo != null) 'photo_base64': base64Encode(photo),
         });
       });
+}
+
+/// The Supabase backend: the core above plus each Phase 3 area, in its own part file.
+class SupabaseWorkforceRepository extends _SupabaseCore with _SupabaseShiftMarket, _SupabaseComms, _SupabasePeople {
+  SupabaseWorkforceRepository(super.client);
 }

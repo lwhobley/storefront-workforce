@@ -271,7 +271,8 @@ select pg_temp.expect_error($$select request_time_correction(jsonb_build_object(
 select pg_temp.expect((select count(*) from pay_period_lines) = 2, 'the manager sees the approved lines');
 
 select pg_temp.as_user('00000000-0000-0000-0000-000000000003');
-select pg_temp.expect((select count(*) from pay_period_lines) = 1, 'an employee sees only their own pay lines');
+select pg_temp.expect((select count(*) from pay_period_lines) = 0, 'employees do not see wages (pay lines)');
+select pg_temp.expect((select count(*) from pay_rates) = 0, 'employees do not see pay rates');
 select pg_temp.expect_error($$select record_payroll_export((select id from pay_periods where status = 'approved'), 'import_csv', 'x.csv', 2, 9.5, 123.5, 'abc')$$,
   'an employee cannot export payroll');
 

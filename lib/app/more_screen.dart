@@ -5,7 +5,10 @@ import '../core/i18n/strings.dart';
 import '../core/theme/app_theme.dart';
 import '../core/widgets/common.dart';
 import '../features/clock/punch_queue.dart';
+import 'package:go_router/go_router.dart';
+
 import 'providers.dart';
+import 'router.dart';
 
 class MoreScreen extends ConsumerWidget {
   const MoreScreen({super.key});
@@ -21,6 +24,16 @@ class MoreScreen extends ConsumerWidget {
         child: ListView(
           children: [
             ScreenHeader(kicker: session.venue.name, title: session.displayName, subtitle: session.roleLabel),
+            // Sections that do not fit in the phone's bottom bar.
+            if (MediaQuery.sizeOf(context).width < 840)
+              for (final item in navFor(session).skip(4).where((i) => i.path != '/more'))
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
+                  leading: Icon(item.icon),
+                  title: Text(item.label),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.go(item.path),
+                ),
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
               leading: const Icon(Icons.translate),
@@ -48,7 +61,6 @@ class MoreScreen extends ConsumerWidget {
               onTap: () => ref.read(sessionProvider.notifier).signOut(),
             ),
             const SizedBox(height: 24),
-            const EmptyNote('Coming next: pay periods and Paycom export, tips, NPO payouts, onboarding, messaging, and reports.'),
           ],
         ),
       ),
