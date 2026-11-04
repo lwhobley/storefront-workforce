@@ -209,6 +209,12 @@ WorkerWork attributeWork({
     final intervals = tl.paidIntervals(breakRules);
     final paid = intervals.fold(0, (s, i) => s + i.minutes);
     final hasAccepted = ps.any((p) => p.status != PunchStatus.voided);
+    // The local date the group's work starts, so a pay period can tell which problems are its own.
+    final firstLive = ps.where((p) => p.status != PunchStatus.voided).map((p) => p.occurredAt).fold<DateTime?>(
+          null,
+          (a, b) => a == null || b.isBefore(a) ? b : a,
+        );
+    final groupDate = firstLive == null ? null : localDateOf(firstLive, timeZone);
     if (ctx.shiftId == null && ctx.eventId != null && hasAccepted) {
       problems.add(
         PayProblem(
@@ -217,6 +223,7 @@ WorkerWork attributeWork({
           message: 'Punches at event ${ctx.eventId} with no shift; paid as ${ctx.jobRoleCode ?? 'no role'}.',
           workerId: workerId,
           eventId: ctx.eventId,
+          workDate: groupDate,
         ),
       );
     }
@@ -228,6 +235,7 @@ WorkerWork attributeWork({
           message: 'Punches with no shift and no default job role.',
           workerId: workerId,
           eventId: ctx.eventId,
+          workDate: groupDate,
         ),
       );
     }
@@ -244,6 +252,7 @@ WorkerWork attributeWork({
               workerId: workerId,
               eventId: ctx.eventId,
               shiftId: ctx.shiftId,
+              workDate: groupDate,
             ),
           );
         default:
@@ -255,6 +264,7 @@ WorkerWork attributeWork({
               workerId: workerId,
               eventId: ctx.eventId,
               shiftId: ctx.shiftId,
+              workDate: groupDate,
               punchId: issue.punchId,
             ),
           );
@@ -275,6 +285,7 @@ WorkerWork attributeWork({
             workerId: workerId,
             eventId: ctx.eventId,
             shiftId: ctx.shiftId,
+            workDate: localDateOf(p.occurredAt, timeZone),
             punchId: p.id,
           ),
         );

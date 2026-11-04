@@ -85,7 +85,7 @@ class _PeriodBodyState extends ConsumerState<_PeriodBody> {
       builder: (context) => AlertDialog(
         title: const Text('Approve this pay period?'),
         content: Text(
-          '${result.workers.length} people, ${money(result.totalCents)} including tips. '
+          '${result.workers.where((w) => w.lines.isNotEmpty).length} people, ${money(result.totalCents)} including tips. '
           'Approving locks these hours and amounts for the Paycom entry sheet. '
           'A later change needs the period reopened, with a reason.',
         ),
@@ -170,8 +170,13 @@ class _PeriodBodyState extends ConsumerState<_PeriodBody> {
   List<Widget> _openView(AppSession session) {
     final d = widget.data;
     final result = computeEarnings(d, widget.setup, widget.venue);
-    final blocking = [for (final p in result.problems) if (p.isBlocking) p];
-    final warnings = [for (final p in result.problems) if (!p.isBlocking) p];
+    // The data reaches a week past each end of the period (for overtime); only problems
+    // with work inside the period, or with no date, belong to this period.
+    bool inPeriod(PayProblem p) =>
+        p.workDate == null || (!p.workDate!.isBefore(d.period.startsOn) && !p.workDate!.isAfter(d.period.endsOn));
+    final blocking = [for (final p in result.problems) if (p.isBlocking && inPeriod(p)) p];
+    final warnings = [for (final p in result.problems) if (!p.isBlocking && inPeriod(p)) p];
+    final paid = [for (final w in result.workers) if (w.lines.isNotEmpty) w];
     final pending = d.pendingCorrections;
     final unsplit = unsplitPools(d, widget.venue.venue.timeZone);
     final regular = result.workers.fold(0, (s, w) => s + w.regularHoursHundredths);
@@ -185,7 +190,7 @@ class _PeriodBodyState extends ConsumerState<_PeriodBody> {
         padding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
         child: Wrap(spacing: 10, runSpacing: 10, children: [
           for (final t in [
-            StatTile(label: 'People paid', value: '${result.workers.length}', detail: '${result.excludedWorkerIds.length} temps/NPO billed separately'),
+            StatTile(label: 'People paid', value: '${paid.length}', detail: '${result.excludedWorkerIds.length} temps/NPO billed separately'),
             StatTile(label: 'Regular hours', value: hours(regular)),
             StatTile(label: 'Overtime hours', value: hours(overtime), tone: overtime > 0 ? Tone.warn : null),
             StatTile(label: 'Wages', value: money(result.totalCents - tips)),
@@ -244,8 +249,8 @@ class _PeriodBodyState extends ConsumerState<_PeriodBody> {
         SectionHeading('Time corrections (${pending.length} pending)'),
         for (final c in d.corrections.take(20)) _correctionTile(c, session),
       ],
-      SectionHeading('People (${result.workers.length})'),
-      for (final w in [...result.workers]..sort((a, b) => (names[a.workerId]?.lastName ?? '').compareTo(names[b.workerId]?.lastName ?? '')))
+      SectionHeading('People (${paid.length})'),
+      for (final w in [...paid]..sort((a, b) => (names[a.workerId]?.lastName ?? '').compareTo(names[b.workerId]?.lastName ?? '')))
         ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
           title: Text(names[w.workerId]?.displayName ?? w.workerId),

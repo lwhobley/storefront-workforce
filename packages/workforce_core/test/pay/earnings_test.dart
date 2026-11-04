@@ -181,6 +181,8 @@ void main() {
       final p = r.problems.singleWhere((p) => p.kind == PayProblemKind.openClockIn);
       expect(p.isBlocking, isTrue);
       expect(p.shiftId, 'sh-open');
+      // Dated by the local day the work started, so a pay period shows only its own problems.
+      expect(p.workDate, DateTime.utc(2026, 11, 10));
       expect(r.hasBlockingProblems, isTrue);
     });
 
