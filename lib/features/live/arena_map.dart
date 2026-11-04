@@ -41,7 +41,16 @@ class ArenaMap extends StatelessWidget {
           // A small lineup leaves room to print each name next to its pin.
           final named = shown.length <= 16;
           final pinSize = (box.maxWidth / (named ? 14 : (plan == null ? 15 : 18))).clamp(28.0, 48.0);
-          const labelWidth = 104.0;
+          // Each label is as wide as the gap to its nearest neighbor on the same side, so
+          // names wrap instead of running into each other.
+          double labelWidth(Storefront s) {
+            var gap = 104.0;
+            for (final o in shown) {
+              if (o.id == s.id || (o.mapY - s.mapY).abs() > 0.08) continue;
+              gap = math.min(gap, (o.mapX - s.mapX).abs() * box.maxWidth - 6);
+            }
+            return gap.clamp(56.0, 104.0);
+          }
           return Stack(
             clipBehavior: Clip.none,
             children: [
@@ -53,10 +62,10 @@ class ArenaMap extends StatelessWidget {
                   Positioned(
                     // Labels sit inside the map: below pins on the top half, above on the
                     // bottom half, and pulled in from the left and right walls.
-                    left: (s.mapX * box.maxWidth - labelWidth / 2).clamp(0.0, box.maxWidth - labelWidth),
+                    left: (s.mapX * box.maxWidth - labelWidth(s) / 2).clamp(0.0, box.maxWidth - labelWidth(s)),
                     top: s.mapY < 0.5 ? s.mapY * box.maxHeight + pinSize / 2 + 2 : null,
                     bottom: s.mapY >= 0.5 ? (1 - s.mapY) * box.maxHeight + pinSize / 2 + 2 : null,
-                    width: labelWidth,
+                    width: labelWidth(s),
                     child: IgnorePointer(
                       child: Text(
                         mapLabel(s.name),

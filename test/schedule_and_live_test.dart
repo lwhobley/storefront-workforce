@@ -17,7 +17,7 @@ void main() {
 
   test('manager sees every open storefront; lead sees only theirs', () async {
     final (repo, board) = await managerBoard();
-    expect(board.storefrontIds.length, 40);
+    expect(board.storefrontIds.length, 10);
     await repo.signOut();
     await repo.signInWithPin('300003');
     final lead = await repo.loadBoard(repo.liveEvent!.id);

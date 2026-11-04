@@ -314,7 +314,10 @@ class _Attention extends ConsumerWidget {
     final band = venue.rules.minors.bandFor(age);
     final local = atVenue(board.event.callTime, zone);
     final summer = isSummer(DateTime.utc(local.year, local.month, local.day));
-    return summer ? (band?.summerLatestEnd ?? band?.latestEnd) : band?.latestEnd;
+    final hhmm = summer ? (band?.summerLatestEnd ?? band?.latestEnd) : band?.latestEnd;
+    if (hhmm == null) return null;
+    final parts = hhmm.split(':');
+    return DateFormat('h:mm a').format(DateTime(2000, 1, 1, int.parse(parts[0]), int.parse(parts[1])));
   }
 }
 

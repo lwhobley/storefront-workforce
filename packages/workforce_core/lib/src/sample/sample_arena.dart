@@ -217,87 +217,187 @@ DateTime _maxDate(DateTime a, DateTime b) => a.isAfter(b) ? a : b;
 // ---------------------------------------------------------------------------------------------
 // Venue layout
 
-enum _Size { large, small, none }
-
 class _StorefrontDef {
   const _StorefrontDef(
-    this.level,
-    this.section,
-    this.kind,
-    this.name, {
     this.code,
-    this.size = _Size.none,
-    this.staff = 0,
+    this.name,
+    this.kind,
+    this.description, {
+    this.section = '',
+    this.side,
+    this.nudge = 0,
+    this.active = true,
+    this.smallCrowd = true,
+    required this.stations,
+    required this.staffing,
   });
 
-  final int level;
-  final int section;
-  final StorefrontKind kind;
+  /// Also the key for stable ids.
+  final String code;
   final String name;
+  final StorefrontKind kind;
+  final String description;
 
-  /// Carts and kiosks have their own codes; stands and bars use the section.
-  final String? code;
-  final _Size size;
+  /// Seating section it sits behind; empty for one placed by concourse side.
+  final String section;
 
-  /// Bartenders for bars, cashiers for carts.
-  final int staff;
+  /// north, south, east or west, for storefronts not tied to a section.
+  final String? side;
+  final double nudge;
+  final bool active;
+
+  /// Opens for crowds under [_smallCrowd].
+  final bool smallCrowd;
+  final List<(String, String?)> stations;
+
+  /// Sellout-night staffing by job role.
+  final Map<String, int> staffing;
 }
 
 const _stand = StorefrontKind.permanentStand;
 const _bar = StorefrontKind.bar;
-const _cart = StorefrontKind.portableCart;
 const _kiosk = StorefrontKind.kiosk;
 
-const _levelDefs = [('Main Concourse', 101, 124), ('Club Level', 201, 216), ('Upper Concourse', 301, 324)];
+/// Below this expected attendance the Westside Bar and Grab & Go stay closed and staffing
+/// is cut by about a quarter.
+const _smallCrowd = 3500;
 
+const _barDescription = 'Craft and Domestic Beers and Mixed Drinks';
+const _barStations = [
+  ('Well 1', 'bartender'),
+  ('Well 2', 'bartender'),
+  ('Well 3', 'bartender'),
+  ('Service Bar', 'bartender'),
+];
+const _barStaffing = {'lead': 1, 'bartender': 3, 'runner': 1};
+
+/// The venue's concession lineup.
 const _storefrontDefs = [
-  // Main Concourse
-  _StorefrontDef(1, 102, _stand, 'Main Street Burgers', size: _Size.large),
-  _StorefrontDef(1, 103, _bar, 'Saddle Up Saloon', staff: 4),
-  _StorefrontDef(1, 104, _stand, 'Kolache Corner', size: _Size.small),
-  _StorefrontDef(1, 106, _stand, 'Nacho Grande', size: _Size.small),
-  _StorefrontDef(1, 107, _cart, 'Pretzel Cart C-1', code: 'C-1', staff: 2),
-  _StorefrontDef(1, 108, _stand, 'Pecan Valley Grill', size: _Size.large),
-  _StorefrontDef(1, 109, _kiosk, 'Sweet Treats Kiosk', code: 'K-1', staff: 1),
-  _StorefrontDef(1, 110, _stand, 'Taco Trail', size: _Size.large),
-  _StorefrontDef(1, 112, _stand, 'Smokehouse 112', size: _Size.large),
-  _StorefrontDef(1, 114, _stand, 'Fry Shack', size: _Size.small),
-  _StorefrontDef(1, 115, _bar, 'Bluebonnet Taproom 115', staff: 4),
-  _StorefrontDef(1, 116, _stand, 'Pizza Corner', size: _Size.large),
-  _StorefrontDef(1, 118, _stand, 'Chicken Coop', size: _Size.small),
-  _StorefrontDef(1, 119, _cart, 'Lemonade Cart C-2', code: 'C-2', staff: 1),
-  _StorefrontDef(1, 120, _stand, 'Concourse Classics', size: _Size.large),
-  _StorefrontDef(1, 121, _bar, 'Rail Yard Bar 121', staff: 3),
-  _StorefrontDef(1, 122, _stand, 'Stampede Dogs', size: _Size.large),
-  _StorefrontDef(1, 123, _kiosk, 'Popcorn Kiosk K-2', code: 'K-2', staff: 1),
-  // Club Level
-  _StorefrontDef(2, 203, _stand, 'Carving Board', size: _Size.large),
-  _StorefrontDef(2, 205, _bar, 'Lone Star Bar 205', staff: 4),
-  _StorefrontDef(2, 207, _stand, 'Brisket & Bun', size: _Size.small),
-  _StorefrontDef(2, 209, _kiosk, 'Club Coffee Kiosk', code: 'K-3', staff: 1),
-  _StorefrontDef(2, 210, _stand, 'Club Kitchen', size: _Size.large),
-  _StorefrontDef(2, 212, _bar, 'Vineyard Wine Bar 212', staff: 3),
-  _StorefrontDef(2, 214, _stand, 'Street Tacos 214', size: _Size.small),
-  _StorefrontDef(2, 216, _bar, 'Whiskey Rail 216', staff: 3),
-  // Upper Concourse
-  _StorefrontDef(3, 302, _stand, 'Upper Deck Dogs', size: _Size.large),
-  _StorefrontDef(3, 304, _cart, 'Pretzel Cart C-3', code: 'C-3', staff: 2),
-  _StorefrontDef(3, 306, _stand, 'Queso Station', size: _Size.small),
-  _StorefrontDef(3, 308, _bar, 'Top Shelf Bar 308', staff: 4),
-  _StorefrontDef(3, 310, _stand, 'Smokehouse 310', size: _Size.large),
-  _StorefrontDef(3, 312, _cart, 'Lemonade Cart C-4', code: 'C-4', staff: 1),
-  _StorefrontDef(3, 313, _kiosk, 'Candy Kiosk K-4', code: 'K-4', staff: 1),
-  _StorefrontDef(3, 314, _stand, 'Fajita Fiesta', size: _Size.small),
-  _StorefrontDef(3, 316, _cart, 'Ice Cream Cart C-5', code: 'C-5', staff: 2),
-  _StorefrontDef(3, 317, _stand, 'Slice Upstairs', size: _Size.small),
-  _StorefrontDef(3, 319, _bar, 'Bluebonnet Bar 319', staff: 3),
-  _StorefrontDef(3, 320, _stand, 'Hometown Grill', size: _Size.large),
-  _StorefrontDef(3, 322, _cart, 'Popcorn Cart C-6', code: 'C-6', staff: 1),
-  _StorefrontDef(3, 323, _stand, 'Fry Shack 323', size: _Size.small),
+  _StorefrontDef(
+    'CANTINA',
+    'La Cantina Roja',
+    _stand,
+    'Gourmet Nachos, Quesadillas, Churros, Coffee and Hot Chocolate',
+    section: '106',
+    stations: [
+      ('Register 1', 'cashier'),
+      ('Register 2', 'cashier'),
+      ('Register 3', 'cashier'),
+      ('Kitchen', 'cook'),
+      ('Expo', 'runner'),
+    ],
+    staffing: {'lead': 1, 'cashier': 3, 'cook': 3, 'runner': 1},
+  ),
+  _StorefrontDef(
+    'GRILL',
+    'Allen Station Grill',
+    _stand,
+    'Hot Dogs, Burgers, Chicken Strips, Chicken Sandwiches, Nachos, Kids Meals, Coffee and Hot Chocolate',
+    section: '103',
+    stations: [
+      ('Register 1', 'cashier'),
+      ('Register 2', 'cashier'),
+      ('Register 3', 'cashier'),
+      ('Register 4', 'cashier'),
+      ('Grill', 'cook'),
+      ('Fryer', 'cook'),
+      ('Expo', 'runner'),
+    ],
+    staffing: {'lead': 1, 'cashier': 4, 'cook': 4, 'runner': 1},
+  ),
+  _StorefrontDef(
+    'SLICE',
+    'Slice',
+    _stand,
+    'Pizza by the slice',
+    section: '101',
+    stations: [('Register 1', 'cashier'), ('Register 2', 'cashier'), ('Ovens', 'cook')],
+    staffing: {'lead': 1, 'cashier': 2, 'cook': 2},
+  ),
+  _StorefrontDef(
+    'EBS',
+    'Eb’s BBQ',
+    _stand,
+    'Beef Sandwiches, Pulled Pork Sandwiches, Jumbo Hot Dogs, Loaded BBQ Nachos and Kids Meals',
+    section: '117',
+    stations: [
+      ('Register 1', 'cashier'),
+      ('Register 2', 'cashier'),
+      ('Register 3', 'cashier'),
+      ('Smoker/Carving', 'cook'),
+      ('Expo', 'runner'),
+    ],
+    staffing: {'lead': 1, 'cashier': 3, 'cook': 3, 'runner': 1},
+  ),
+  _StorefrontDef(
+    'AADOG',
+    'All American Dog',
+    _stand,
+    'Hot Dogs, French Fries, Footlong Corndogs, Kids Meals, Coffee and Hot Chocolate',
+    section: '114',
+    stations: [
+      ('Register 1', 'cashier'),
+      ('Register 2', 'cashier'),
+      ('Register 3', 'cashier'),
+      ('Grill', 'cook'),
+      ('Fryer', 'cook'),
+    ],
+    staffing: {'lead': 1, 'cashier': 3, 'cook': 2, 'runner': 1},
+  ),
+  _StorefrontDef(
+    'SOUTHSIDE',
+    'Southside Bar presented by Lazy Dog',
+    _bar,
+    _barDescription,
+    section: '115',
+    stations: _barStations,
+    staffing: _barStaffing,
+  ),
+  _StorefrontDef(
+    'DESTINATION',
+    'Destination Bar',
+    _bar,
+    _barDescription,
+    section: '105',
+    stations: _barStations,
+    staffing: _barStaffing,
+  ),
+  _StorefrontDef(
+    'WESTSIDE',
+    'Westside Bar presented by Ole Smoky',
+    _bar,
+    _barDescription,
+    side: 'west',
+    smallCrowd: false,
+    stations: _barStations,
+    staffing: _barStaffing,
+  ),
+  _StorefrontDef(
+    'GRABGO',
+    'Grab & Go',
+    _kiosk,
+    'Grab-and-go snacks and drinks',
+    side: 'south',
+    nudge: 0.12,
+    smallCrowd: false,
+    stations: [('Counter', 'cashier')],
+    staffing: {'cashier': 2},
+  ),
+  _StorefrontDef(
+    'SWEET',
+    'Sweet Station',
+    _kiosk,
+    'Coming soon',
+    side: 'north',
+    nudge: -0.12,
+    active: false,
+    stations: [('Counter', 'cashier')],
+    staffing: {},
+  ),
 ];
 
-/// Home stands of the nonprofit groups, in group order.
-const _npoHomeStands = ['106', '114', '118', '122', '207', '302', '310', '314'];
+/// Home stands of the nonprofit groups, in group order (storefront keys).
+const _npoHomeStands = ['EBS', 'AADOG'];
 
 const _roleOrder = ['lead', 'cashier', 'cook', 'runner', 'bartender'];
 
@@ -401,9 +501,8 @@ class _Generator {
   final punches = <Punch>[];
 
   final _defs = <String, _StorefrontDef>{};
-  final _levelOf = <String, int>{};
 
-  /// The storefront's original key (section or cart code), used for stable ids.
+  /// The storefront's key (its code), used for stable ids.
   final _keyOf = <String, String>{};
   final _stationsBy = <String, List<Station>>{};
   final _needsBy = <String, List<StaffingNeed>>{};
@@ -418,10 +517,13 @@ class _Generator {
     final venue = Venue(
       id: venueId,
       organizationId: orgId,
-      name: 'Pecan Valley Arena',
+      name: 'CUTX Event Center (sample)',
       timeZone: 'America/Chicago',
       // The map is drawn from the CUTX plan; every storefront is on its concourse.
-      settings: {...rules.toJson(), 'map': {'layout': 'cutx'}},
+      settings: {
+        ...rules.toJson(),
+        'map': {'layout': 'cutx'},
+      },
       branding: const {'app_name': 'Storefront Workforce', 'primary_color': '#0088B0'},
     );
     _buildLayout();
@@ -473,7 +575,7 @@ class _Generator {
     return SampleArena._(
       now: now,
       seed: seed,
-      organization: {'id': orgId, 'name': 'Pecan Valley Sports & Entertainment'},
+      organization: {'id': orgId, 'name': 'CUTX Event Center'},
       venue: venue,
       levels: List.unmodifiable(levels),
       storefronts: List.unmodifiable(storefronts),
@@ -496,84 +598,46 @@ class _Generator {
   // Levels, storefronts, stations, default staffing
 
   void _buildLayout() {
-    // One level: the CUTX concourse, which wraps the lower bowl. The storefront list keeps
-    // its original three groups only to set staffing priority and variety; on the map they
-    // are interleaved evenly around the concourse.
+    // One level: the CUTX concourse, which wraps the lower bowl.
     levels.add(VenueLevel(id: id('level:1'), venueId: venueId, name: 'Concourse', sort: 1));
-    double fraction(_StorefrontDef d) {
-      final (_, first, last) = _levelDefs[d.level - 1];
-      return (d.section - first + 0.5) / (last - first + 1);
-    }
-
-    final ordered = [..._storefrontDefs]..sort((a, b) {
-        final f = fraction(a).compareTo(fraction(b));
-        return f != 0 ? f : a.level.compareTo(b.level);
-      });
-    final spots = cutxLayout.concourseSpots(ordered.length, depth: 0.55);
-    final usedCodes = <String, int>{};
-    for (var i = 0; i < ordered.length; i++) {
-      final d = ordered[i];
-      final key = d.code ?? '${d.section}';
-      final spot = spots[i];
-      final section = cutxLayout.nearestSection(spot).name;
-      // Stands and bars are numbered by the nearest seating section (105, 105B...).
-      // Carts and kiosks keep their own codes.
-      String code;
-      if (d.code != null) {
-        code = d.code!;
-      } else {
-        final n = usedCodes.update(section, (v) => v + 1, ifAbsent: () => 1);
-        code = n == 1 ? section : '$section${String.fromCharCode(64 + n)}';
-      }
-      final name = RegExp(r' \d{3}$').hasMatch(d.name) ? '${d.name.substring(0, d.name.length - 4)} $code' : d.name;
+    for (final d in _storefrontDefs) {
+      final spot = d.side != null
+          ? cutxLayout.concourseSide(d.side!, nudge: d.nudge)
+          : cutxLayout.concourseSpotNearSection(d.section, nudge: d.nudge);
       final sf = Storefront(
-        id: id('storefront:$key'),
+        id: id('storefront:${d.code}'),
         venueId: venueId,
         levelId: levels.first.id,
-        code: code,
-        name: name,
+        code: d.code,
+        name: d.name,
         kind: d.kind,
-        section: section,
-        mapX: spot.$1,
-        mapY: spot.$2,
+        section: d.section,
+        mapX: (spot.$1 * 10000).round() / 10000,
+        mapY: (spot.$2 * 10000).round() / 10000,
+        active: d.active,
+        description: d.description,
       );
       storefronts.add(sf);
       _defs[sf.id] = d;
-      _levelOf[sf.id] = d.level;
-      _keyOf[sf.id] = key;
+      _keyOf[sf.id] = d.code;
 
-      final stationDefs = switch (d.kind) {
-        _stand when d.size == _Size.large => const [
-          ('Register 1', 'cashier'),
-          ('Register 2', 'cashier'),
-          ('Register 3', 'cashier'),
-          ('Grill', 'cook'),
-          ('Fryer', 'cook'),
-          ('Expo', 'runner'),
-        ],
-        _stand => const [('Register 1', 'cashier'), ('Register 2', 'cashier'), ('Grill', 'cook'), ('Expo', 'runner')],
-        _bar => const [('Well 1', 'bartender'), ('Well 2', 'bartender'), ('Service Bar', 'bartender')],
-        _cart => const [('Cart', 'cashier')],
-        _kiosk => const [('Counter', 'cashier')],
-      };
-      final list = <Station>[];
-      for (final (name, role) in stationDefs) {
-        list.add(
-          Station(id: id('station:$key:$name'), venueId: venueId, storefrontId: sf.id, name: name, jobRoleCode: role),
-        );
-      }
+      final list = [
+        for (final (name, role) in d.stations)
+          Station(
+            id: id('station:${d.code}:$name'),
+            venueId: venueId,
+            storefrontId: sf.id,
+            name: name,
+            jobRoleCode: role,
+          ),
+      ];
       stations.addAll(list);
       _stationsBy[sf.id] = list;
 
-      final counts = switch (d.kind) {
-        _stand when d.size == _Size.large => const {'lead': 1, 'cashier': 4, 'cook': 4, 'runner': 1},
-        _stand => const {'lead': 1, 'cashier': 2, 'cook': 2, 'runner': 1},
-        _bar => {'lead': 1, 'bartender': d.staff, 'runner': 1},
-        _cart || _kiosk => {'cashier': d.staff},
-      };
       final needs = [
         for (final role in _roleOrder)
-          if ((counts[role] ?? 0) > 0) StaffingNeed(storefrontId: sf.id, jobRoleCode: role, count: counts[role]!),
+          if ((d.staffing[role] ?? 0) > 0)
+            StaffingNeed(storefrontId: sf.id, jobRoleCode: role, count: d.staffing[role]!),
       ];
       staffingNeeds.addAll(needs);
       _needsBy[sf.id] = needs;
@@ -592,7 +656,7 @@ class _Generator {
     var order = 0;
     _Spec spec(WorkerType t, List<String> roles, int age) => _Spec(t, roles, age, order++);
 
-    // Regular seasonal staff: 180.
+    // Regular seasonal staff: 70.
     final regular = <_Spec>[];
     void addN(int n, List<String> roles, int minAge, int maxAge) {
       for (var i = 0; i < n; i++) {
@@ -600,35 +664,35 @@ class _Generator {
       }
     }
 
-    addN(10, ['lead', 'cashier'], 22, 60);
-    addN(12, ['lead', 'cook'], 22, 60);
-    addN(4, ['lead', 'bartender'], 23, 55);
-    addN(4, ['lead'], 25, 62);
-    addN(14, ['bartender'], 21, 55);
-    addN(12, ['bartender', 'cashier'], 21, 50);
-    addN(10, ['bartender', 'runner'], 21, 45);
-    addN(15, ['cook'], 18, 62);
-    addN(18, ['cook', 'cashier'], 18, 60);
-    addN(6, ['cook', 'runner'], 18, 45);
-    addN(6, ['cook', 'cashier', 'runner'], 18, 50);
-    addN(15, ['cashier'], 18, 65);
-    addN(20, ['cashier', 'runner'], 18, 60);
-    addN(6, ['cashier', 'cook'], 18, 55);
-    addN(8, ['runner', 'cashier'], 18, 30);
-    addN(4, ['runner'], 18, 28);
-    for (var i = 0; i < 12; i++) {
-      final roles = i < 6
+    addN(3, ['lead', 'cashier'], 22, 60);
+    addN(4, ['lead', 'cook'], 22, 60);
+    addN(2, ['lead', 'bartender'], 23, 55);
+    addN(1, ['lead'], 25, 62);
+    addN(5, ['bartender'], 21, 55);
+    addN(4, ['bartender', 'cashier'], 21, 50);
+    addN(3, ['bartender', 'runner'], 21, 45);
+    addN(5, ['cook'], 18, 62);
+    addN(7, ['cook', 'cashier'], 18, 60);
+    addN(2, ['cook', 'runner'], 18, 45);
+    addN(2, ['cook', 'cashier', 'runner'], 18, 50);
+    addN(5, ['cashier'], 18, 65);
+    addN(8, ['cashier', 'runner'], 18, 60);
+    addN(3, ['cashier', 'cook'], 18, 55);
+    addN(6, ['runner', 'cashier'], 18, 30);
+    addN(2, ['runner'], 18, 28);
+    for (var i = 0; i < 6; i++) {
+      final roles = i < 3
           ? ['cashier', 'runner']
-          : i < 10
+          : i < 5
           ? ['cook', 'cashier']
           : ['runner'];
       regular.add(spec(WorkerType.regular, roles, 16 + rng.nextInt(2)));
     }
-    for (var i = 0; i < 4; i++) {
-      regular.add(spec(WorkerType.regular, i < 3 ? ['cashier', 'runner'] : ['runner'], 14 + rng.nextInt(2)));
+    for (var i = 0; i < 2; i++) {
+      regular.add(spec(WorkerType.regular, i == 0 ? ['cashier', 'runner'] : ['runner'], 14 + rng.nextInt(2)));
     }
 
-    // Temps: 40 across two agencies.
+    // Temps: 14 across two agencies.
     final temps = <_Spec>[];
     void addT(int n, List<String> roles, int minAge, int maxAge) {
       for (var i = 0; i < n; i++) {
@@ -636,13 +700,13 @@ class _Generator {
       }
     }
 
-    addT(6, ['bartender', 'cashier'], 21, 50);
-    addT(8, ['cook'], 19, 55);
-    addT(6, ['cook', 'cashier'], 19, 55);
-    addT(14, ['cashier', 'runner'], 18, 60);
-    addT(6, ['runner', 'cashier'], 18, 40);
+    addT(3, ['bartender', 'cashier'], 21, 50);
+    addT(3, ['cook'], 19, 55);
+    addT(2, ['cook', 'cashier'], 19, 55);
+    addT(4, ['cashier', 'runner'], 18, 60);
+    addT(2, ['runner', 'cashier'], 18, 40);
 
-    // Nonprofit members: 8 groups of 10.
+    // Nonprofit members: 2 groups of 9.
     final npo = <_Spec>[];
     for (var g = 0; g < _npoDefs.length; g++) {
       final members = <_Spec>[
@@ -652,8 +716,7 @@ class _Generator {
         spec(WorkerType.npo, ['cook', 'cashier'], _adultAge(18, 60)),
         spec(WorkerType.npo, ['cook', 'cashier'], g.isEven ? 16 + rng.nextInt(2) : _adultAge(18, 60)),
         spec(WorkerType.npo, ['cashier', 'runner'], _adultAge(18, 65)),
-        spec(WorkerType.npo, ['cashier', 'runner'], _adultAge(18, 65)),
-        spec(WorkerType.npo, ['cashier'], g % 3 == 0 ? 16 + rng.nextInt(2) : _adultAge(18, 65)),
+        spec(WorkerType.npo, ['cashier'], _adultAge(18, 65)),
         spec(WorkerType.npo, ['cashier', 'runner'], g.isOdd ? 14 + rng.nextInt(2) : 16 + rng.nextInt(2)),
         spec(WorkerType.npo, ['runner', 'cashier'], _adultAge(18, 55)),
       ];
@@ -667,10 +730,10 @@ class _Generator {
       _fillPerson(s);
     }
 
-    // Agencies: 22 and 18.
+    // Agencies: 8 and 6.
     final tempOrder = [...temps]..shuffle(rng);
     for (var i = 0; i < tempOrder.length; i++) {
-      tempOrder[i].agencyId = agencies[i < 22 ? 0 : 1].id;
+      tempOrder[i].agencyId = agencies[i < 8 ? 0 : 1].id;
     }
 
     // Employee numbers follow hire date.
@@ -721,7 +784,7 @@ class _Generator {
           legalName: legal,
           displayName: display,
           coordinatorName: '${members.first.first} ${members.first.last}',
-          w9OnFile: g != 5,
+          w9OnFile: true,
         ),
       );
     }
@@ -765,7 +828,7 @@ class _Generator {
     } while (!_usedNames.add('${s.first} ${s.last}'));
     final nick = _nicknames[s.first];
     if (nick != null && _chance(rng, 0.35)) s.preferred = nick;
-    if (heritage == 'hispanic' && _chance(rng, 0.7)) s.language = 'es';
+    if (heritage == 'hispanic' && _chance(rng, 0.8)) s.language = 'es';
 
     s.dob = DateTime.utc(today.year - s.age, today.month, today.day).subtract(Duration(days: 1 + rng.nextInt(364)));
 
@@ -845,18 +908,13 @@ class _Generator {
     }
 
     expire(bartenders[0], 'tabc');
-    expire(bartenders[1], 'tabc');
+    expiring(bartenders[1], 'tabc');
     expiring(bartenders[2], 'tabc');
-    expiring(bartenders[3], 'tabc');
-    expiring(bartenders[4], 'tabc');
-    bartenders[5].certs.remove('tabc');
+    bartenders[3].certs.remove('tabc');
     expire(cooks[0], 'food_handler');
-    expire(cooks[1], 'food_handler');
+    expiring(cooks[1], 'food_handler');
     expiring(cooks[2], 'food_handler');
-    expiring(cooks[3], 'food_handler');
-    expiring(cooks[4], 'food_handler');
-    cooks[5].certs.remove('food_handler');
-    cooks[6].certs.remove('food_handler');
+    cooks[3].certs.remove('food_handler');
   }
 
   Worker _toWorker(_Spec s) {
@@ -1043,9 +1101,9 @@ class _Generator {
   int _attendance(String type, DateTime date) {
     final weekend = date.weekday >= DateTime.friday;
     final (lo, hi) = switch (type) {
-      'concert' => (8500, 12500),
-      'family_show' => (4000, 6500),
-      _ => weekend ? (9000, 11800) : (6500, 9500),
+      'concert' => (4000, 6500),
+      'family_show' => (2000, 4500),
+      _ => weekend ? (4000, 5500) : (3000, 4500),
     };
     return _between(srng, lo ~/ 50, hi ~/ 50) * 50;
   }
@@ -1053,45 +1111,21 @@ class _Generator {
   // -------------------------------------------------------------------------------------------
   // Staffing and shifts
 
-  int _priority(_StorefrontDef d) {
-    return switch ((d.level, d.kind)) {
-      (1, _stand) => 90,
-      (2, _stand) => 85,
-      (1, _bar) => 80,
-      (3, _stand) when d.size == _Size.large => 70,
-      (2, _bar) => 65,
-      (1, _kiosk) => 60,
-      (3, _stand) => 55,
-      (1, _cart) => 50,
-      (3, _bar) => 45,
-      (2, _kiosk) => 40,
-      (3, _cart) => 30,
-      _ => 25,
-    };
-  }
-
   void _scheduleEvent(Event e) {
     final ctx = _Ctx(e, _dateKey(_localDate(e.startTime)), _localDate(e.startTime));
 
-    // Which storefronts open.
-    final t = ((e.expectedAttendance - 4500) / 7000).clamp(0.0, 1.0);
-    final openCount = (25 + 15 * t).round();
-    final ranked = [
+    // Which storefronts open: every active one, except a few for small crowds.
+    final small = e.expectedAttendance < _smallCrowd;
+    final open = {
       for (final sf in storefronts)
-        (
-          sf,
-          _priority(_defs[sf.id]!) +
-              srng.nextDouble() * 12 -
-              (e.eventTypeCode == 'family_show' && sf.kind == _bar ? 40 : 0),
-        ),
-    ]..sort((a, b) => b.$2.compareTo(a.$2));
-    final open = {for (final r in ranked.take(openCount)) r.$1.id};
+        if (sf.active && (!small || _defs[sf.id]!.smallCrowd)) sf.id,
+    };
     for (final sf in storefronts) {
       eventStorefronts.add(EventStorefront(eventId: e.id, storefrontId: sf.id, isOpen: open.contains(sf.id)));
     }
 
-    // Staffing scaled from the defaults.
-    final f = (e.expectedAttendance / 10000).clamp(0.7, 1.0);
+    // Staffing scaled from the sellout defaults (about a quarter less for small crowds).
+    final f = small ? 0.75 : (e.expectedAttendance / 5500).clamp(0.8, 1.0);
     final barFactor = switch (e.eventTypeCode) {
       'concert' => 1.15,
       'family_show' => 0.6,
@@ -1148,7 +1182,7 @@ class _Generator {
           .toList();
       for (final w in young) {
         final slot = positions.firstWhere(
-          (p) => p.worker == null && w.jobRoles.contains(p.role) && _levelOf[p.storefront.id] == 1,
+          (p) => p.worker == null && w.jobRoles.contains(p.role) && p.storefront.kind == _stand,
           orElse: () => positions.firstWhere((p) => p.worker == null && w.jobRoles.contains(p.role)),
         );
         assign(slot, w);
@@ -1212,7 +1246,10 @@ class _Generator {
     }
 
     // Leave some positions open: a few for upcoming and live events, about 1% for past ones.
-    final targetOpen = (positions.length * (ctx.isPast ? 0.01 : 0.03 + srng.nextDouble() * 0.03)).round();
+    // With about 50 positions an event, round past events' 1% at random so it averages out.
+    final targetOpen = ctx.isPast
+        ? (positions.length * 0.01 + srng.nextDouble()).floor()
+        : max(1, (positions.length * (0.03 + srng.nextDouble() * 0.03)).round());
     var openNow = positions.where((p) => p.worker == null).length;
     while (openNow < targetOpen) {
       final cands = positions.where((p) => p.worker != null && p.role != 'lead' && !p.deliberateMinor).toList();
@@ -1368,22 +1405,19 @@ class _Generator {
     final e = ctx.event;
     final assigned = positions.where((p) => p.worker != null).toList();
     final pool = assigned.where((p) => p.role != 'lead' && !p.deliberateMinor).toList()..shuffle(srng);
-    final notArrived = pool.take(6).toList();
-    // Two are on a later call and not due yet; one was due 15 minutes ago; three are well past call.
+    final notArrived = pool.take(3).toList();
+    // One is on a later call and not due yet, one was due 15 minutes ago, one is well past call.
     notArrived[0].call = e.startTime;
-    notArrived[1].call = e.startTime;
-    notArrived[2].call = e.doorsTime.add(const Duration(minutes: 30));
-    final rest = pool.skip(6).toList();
-    final released = rest
-        .where((p) => p.storefront.kind == _cart || p.storefront.kind == _kiosk || p.role == 'cashier')
-        .take(2)
-        .toList();
-    final onBreak = rest.where((p) => !released.contains(p)).take(4).toList();
+    notArrived[1].call = e.doorsTime.add(const Duration(minutes: 30));
+    final late = pool.skip(3).take(2).toSet();
+    final rest = pool.skip(5).toList();
+    final released = rest.where((p) => p.storefront.kind == _kiosk || p.role == 'cashier').take(1).toList();
+    final onBreak = rest.where((p) => !released.contains(p)).take(3).toList();
     final latest = now.subtract(const Duration(minutes: 1));
 
     for (final p in assigned) {
       if (notArrived.contains(p)) continue;
-      var clockIn = _chance(srng, 0.07)
+      var clockIn = late.contains(p)
           ? p.call.add(_mins(_between(srng, 6, 40), srng.nextInt(60)))
           : p.call.subtract(_mins(_between(srng, 0, 14), srng.nextInt(60)));
       if (clockIn.isAfter(latest)) clockIn = latest;
@@ -1423,10 +1457,7 @@ class _Generator {
   void _emit(_Ctx ctx, _Pos p, List<(PunchKind, DateTime, BreakKind?)> items) {
     final w = p.worker!;
     final kiosk = _chance(srng, 0.3);
-    final level = _levelOf[p.storefront.id]!;
-    final device = kiosk
-        ? 'kiosk-${const ['main', 'club', 'upper'][level - 1]}-${1 + srng.nextInt(2)}'
-        : 'phone-${w.employeeNumber.toLowerCase()}';
+    final device = kiosk ? 'kiosk-concourse-${1 + srng.nextInt(2)}' : 'phone-${w.employeeNumber.toLowerCase()}';
     final baseLat = venueLat + (0.5 - p.storefront.mapY) * 0.0018;
     final baseLng = venueLng + (p.storefront.mapX - 0.5) * 0.0022;
     for (var i = 0; i < items.length; i++) {
@@ -1487,12 +1518,6 @@ String _ascii(String s) {
 const _npoDefs = [
   ('Pecan Valley High School Band Boosters', 'Pecan Valley High School Band Booster Club, Inc.'),
   ('Allenridge Youth Soccer Association', 'Allenridge Youth Soccer Association, Inc.'),
-  ('Trinity Lakes Lions Club', 'Trinity Lakes Lions Club Foundation, Inc.'),
-  ('St. Brigid Parish Youth Ministry', 'St. Brigid Parish Youth Ministry, Inc.'),
-  ('Cedar Bend Volunteer Fire Auxiliary', 'Cedar Bend Volunteer Fire Department Auxiliary, Inc.'),
-  ('Pecan Valley Robotics Club', 'Pecan Valley Robotics Boosters, Inc.'),
-  ('Mesquite Creek Elementary PTO', 'Mesquite Creek Elementary Parent-Teacher Organization, Inc.'),
-  ('Riverside High School Cheer Boosters', 'Riverside High School Cheer Booster Club, Inc.'),
 ];
 
 const _opponents = [

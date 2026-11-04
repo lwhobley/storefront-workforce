@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:test/test.dart';
 import 'package:workforce_core/src/layout/cutx_layout.dart';
@@ -8,6 +9,20 @@ import 'package:workforce_core/src/sample/sample_arena.dart';
 
 final _now = DateTime.utc(2026, 11, 4, 23, 30);
 final _uuid = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$');
+
+/// Distance on the drawn map (x scaled by the footprint's aspect ratio).
+double _dist(MapPoint a, MapPoint b) => sqrt(pow((a.$1 - b.$1) * cutxLayout.aspectRatio, 2) + pow(a.$2 - b.$2, 2));
+
+bool _inside(List<MapPoint> poly, MapPoint p) {
+  var inside = false;
+  for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    final a = poly[i], b = poly[j];
+    if ((a.$2 > p.$2) != (b.$2 > p.$2) && p.$1 < (b.$1 - a.$1) * (p.$2 - a.$2) / (b.$2 - a.$2) + a.$1) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
 
 /// Calendar date of an event in venue time. Events start between 14:00 and 20:00 Central,
 /// so six hours back from the UTC start always lands on the local date.
@@ -58,23 +73,110 @@ void main() {
 
   group('counts', () {
     test('venue layout', () {
-      expect(arena.organization['name'], 'Pecan Valley Sports & Entertainment');
-      expect(arena.venue.name, 'Pecan Valley Arena');
+      expect(arena.organization['name'], 'CUTX Event Center');
+      expect(arena.venue.name, 'CUTX Event Center (sample)');
       expect(arena.venue.timeZone, 'America/Chicago');
-      expect(arena.levels.map((l) => l.name), ['Concourse']);
-      expect(arena.storefronts, hasLength(40));
-      int kind(StorefrontKind k) => arena.storefronts.where((s) => s.kind == k).length;
-      expect(kind(StorefrontKind.bar), 8);
-      expect(kind(StorefrontKind.portableCart), 6);
-      expect(kind(StorefrontKind.kiosk), 4);
-      expect(kind(StorefrontKind.permanentStand), 22);
-      expect(arena.storefronts.every((s) => s.levelId == arena.levels.single.id), isTrue);
-      // Every storefront sits on the CUTX concourse, outside the bowl, labeled by a real section.
-      final sections = {for (final s in cutxLayout.sections) s.name};
-      expect(arena.storefronts.every((s) => sections.contains(s.section)), isTrue);
       expect(arena.venue.settings['map'], {'layout': 'cutx'});
+      expect(arena.venue.settings['attendance'], isNotNull);
+      expect(arena.levels.map((l) => l.name), ['Concourse']);
+      expect(arena.storefronts.every((s) => s.levelId == arena.levels.single.id), isTrue);
       for (final s in arena.storefronts) {
         expect(arena.stations.where((st) => st.storefrontId == s.id), isNotEmpty, reason: s.code);
+        expect(s.code.length, lessThanOrEqualTo(20));
+      }
+    });
+
+    test('exactly the venue lineup', () {
+      const bar = 'Craft and Domestic Beers and Mixed Drinks';
+      final expected = [
+        (
+          'CANTINA',
+          'La Cantina Roja',
+          '106',
+          StorefrontKind.permanentStand,
+          true,
+          'Gourmet Nachos, Quesadillas, Churros, Coffee and Hot Chocolate',
+        ),
+        (
+          'GRILL',
+          'Allen Station Grill',
+          '103',
+          StorefrontKind.permanentStand,
+          true,
+          'Hot Dogs, Burgers, Chicken Strips, Chicken Sandwiches, Nachos, Kids Meals, Coffee and Hot Chocolate',
+        ),
+        ('SLICE', 'Slice', '101', StorefrontKind.permanentStand, true, 'Pizza by the slice'),
+        (
+          'EBS',
+          'Eb’s BBQ',
+          '117',
+          StorefrontKind.permanentStand,
+          true,
+          'Beef Sandwiches, Pulled Pork Sandwiches, Jumbo Hot Dogs, Loaded BBQ Nachos and Kids Meals',
+        ),
+        (
+          'AADOG',
+          'All American Dog',
+          '114',
+          StorefrontKind.permanentStand,
+          true,
+          'Hot Dogs, French Fries, Footlong Corndogs, Kids Meals, Coffee and Hot Chocolate',
+        ),
+        ('SOUTHSIDE', 'Southside Bar presented by Lazy Dog', '115', StorefrontKind.bar, true, bar),
+        ('DESTINATION', 'Destination Bar', '105', StorefrontKind.bar, true, bar),
+        ('WESTSIDE', 'Westside Bar presented by Ole Smoky', '', StorefrontKind.bar, true, bar),
+        ('GRABGO', 'Grab & Go', '', StorefrontKind.kiosk, true, 'Grab-and-go snacks and drinks'),
+        ('SWEET', 'Sweet Station', '', StorefrontKind.kiosk, false, 'Coming soon'),
+      ];
+      expect(arena.storefronts, hasLength(expected.length));
+      for (final (code, name, section, kind, active, description) in expected) {
+        final s = arena.storefronts.singleWhere((s) => s.code == code);
+        expect((s.name, s.section, s.kind, s.active, s.description), (name, section, kind, active, description));
+      }
+    });
+
+    test('Sweet Station is inactive, never opened and never staffed', () {
+      final sweet = arena.storefronts.singleWhere((s) => s.code == 'SWEET');
+      expect(sweet.active, isFalse);
+      expect(arena.stations.where((st) => st.storefrontId == sweet.id).map((st) => st.name), ['Counter']);
+      expect(arena.staffingNeeds.where((n) => n.storefrontId == sweet.id), isEmpty);
+      expect(arena.eventStorefronts.where((es) => es.storefrontId == sweet.id && es.isOpen), isEmpty);
+      expect(arena.eventStaffingNeeds.where((n) => n.storefrontId == sweet.id), isEmpty);
+      expect(arena.shifts.where((s) => s.storefrontId == sweet.id), isEmpty);
+    });
+
+    test('active storefronts sit on the concourse, outside the bowl', () {
+      for (final s in arena.storefronts.where((s) => s.active)) {
+        expect(s.mapX, inInclusiveRange(0, 1), reason: s.code);
+        expect(s.mapY, inInclusiveRange(0, 1), reason: s.code);
+        expect(_inside(cutxLayout.bowl, (s.mapX, s.mapY)), isFalse, reason: s.code);
+      }
+    });
+
+    test('storefronts at a section sit right behind it', () {
+      for (final s in arena.storefronts.where((s) => s.section.isNotEmpty)) {
+        final target = cutxLayout.sections.singleWhere((x) => x.name == s.section).center;
+        MapPoint? best;
+        var bestD = double.infinity;
+        for (var i = 0; i < 360; i++) {
+          final p = cutxLayout.concourseSpotAt(-pi / 2 + 2 * pi * i / 360);
+          final d = _dist(p, target);
+          if (d < bestD) {
+            bestD = d;
+            best = p;
+          }
+        }
+        expect(_dist((s.mapX, s.mapY), best!), lessThanOrEqualTo(0.06), reason: s.code);
+      }
+    });
+
+    test('map pins do not overlap', () {
+      final active = arena.storefronts.where((s) => s.active).toList();
+      for (var i = 0; i < active.length; i++) {
+        for (var j = i + 1; j < active.length; j++) {
+          final a = active[i], b = active[j];
+          expect(_dist((a.mapX, a.mapY), (b.mapX, b.mapY)), greaterThan(0.07), reason: '${a.code} ${b.code}');
+        }
       }
     });
 
@@ -87,29 +189,43 @@ void main() {
       expect(arena.certificationTypes.map((c) => c.code), ['food_handler', 'tabc']);
     });
 
-    test('default staffing lands between 230 and 260 positions', () {
+    test('default staffing totals 55 positions', () {
       final total = arena.staffingNeeds.fold<int>(0, (s, n) => s + n.count);
-      expect(total, inInclusiveRange(230, 260));
+      expect(total, 55);
+      int at(String code) => arena.staffingNeeds
+          .where((n) => n.storefrontId == arena.storefronts.singleWhere((s) => s.code == code).id)
+          .fold<int>(0, (s, n) => s + n.count);
+      expect(
+        [
+          for (final c in ['GRILL', 'CANTINA', 'EBS', 'AADOG', 'SLICE', 'SOUTHSIDE', 'GRABGO']) at(c),
+        ],
+        [10, 8, 8, 7, 5, 5, 2],
+      );
       expect(arena.staffingNeeds.every((n) => n.eventId == null), isTrue);
     });
 
     test('roster mix', () {
       int type(WorkerType t) => arena.workers.where((w) => w.type == t).length;
-      expect(arena.workers, hasLength(300));
-      expect(type(WorkerType.regular), 180);
-      expect(type(WorkerType.temp), 40);
-      expect(type(WorkerType.npo), 80);
-      expect(arena.agencies, hasLength(2));
-      expect(arena.npoGroups, hasLength(8));
-      expect(arena.npoGroups.where((g) => !g.w9OnFile), hasLength(1));
+      expect(arena.workers, hasLength(102));
+      expect(type(WorkerType.regular), 70);
+      expect(type(WorkerType.temp), 14);
+      expect(type(WorkerType.npo), 18);
+      expect(arena.agencies.map((a) => a.name), ['Brazos Staffing Partners', 'Gulf Coast Event Labor']);
+      expect(arena.npoGroups.map((g) => g.displayName), [
+        'Pecan Valley High School Band Boosters',
+        'Allenridge Youth Soccer Association',
+      ]);
+      for (final g in arena.npoGroups) {
+        expect(arena.workers.where((w) => w.npoGroupId == g.id), hasLength(9));
+      }
       final today = DateTime.utc(2026, 11, 4);
       final regular = arena.workers.where((w) => w.type == WorkerType.regular);
-      expect(regular.where((w) => w.ageOn(today)! >= 16 && w.ageOn(today)! < 18), hasLength(12));
-      expect(regular.where((w) => w.ageOn(today)! < 16), hasLength(4));
+      expect(regular.where((w) => w.ageOn(today)! >= 16 && w.ageOn(today)! < 18), hasLength(6));
+      expect(regular.where((w) => w.ageOn(today)! < 16), hasLength(2));
       expect(arena.workers.every((w) => w.ageOn(today)! >= 14 && w.ageOn(today)! <= 65), isTrue);
       expect(arena.workers.every((w) => w.jobRoles.isNotEmpty && w.jobRoles.length <= 3), isTrue);
       final spanish = arena.workers.where((w) => w.preferredLanguage == 'es').length;
-      expect(spanish, inInclusiveRange(50, 100));
+      expect(spanish, inInclusiveRange(15, 35));
     });
 
     test('events', () {
@@ -119,7 +235,15 @@ void main() {
       expect(status(EventStatus.scheduled), 10);
       expect(arena.events.map((e) => e.eventTypeCode).toSet(), {'hockey', 'concert', 'family_show'});
       for (final e in arena.events) {
-        expect(e.expectedAttendance, inInclusiveRange(4000, 12500));
+        final (lo, hi) = switch (e.eventTypeCode) {
+          'hockey' => (3000, 5500),
+          'concert' => (4000, 6500),
+          _ => (2000, 4500),
+        };
+        expect(e.expectedAttendance, inInclusiveRange(lo, hi), reason: e.name);
+        if (e.actualAttendance case final a?) {
+          expect(a, inInclusiveRange(e.expectedAttendance * 0.9 - 1, e.expectedAttendance * 1.1 + 1));
+        }
         expect(e.actualAttendance != null, e.status == EventStatus.completed);
         expect(e.source == 'manual' || e.externalId != null, isTrue);
       }
@@ -129,6 +253,8 @@ void main() {
     });
 
     test('open positions: about 1% for past events, 3-6% for live and upcoming', () {
+      final past = arena.shifts.where((s) => events[s.eventId]!.status == EventStatus.completed).toList();
+      expect(past.where((s) => s.workerId == null).length / past.length, lessThan(0.025));
       for (final e in arena.events) {
         final shifts = arena.shifts.where((s) => s.eventId == e.id).toList();
         final open = shifts.where((s) => s.workerId == null).length / shifts.length;
@@ -180,12 +306,12 @@ void main() {
         }
       }
       final paycom = arena.workers.where((w) => w.type == WorkerType.regular).map((w) => w.paycomEmployeeCode);
-      expect(paycom.toSet(), hasLength(180));
+      expect(paycom.toSet(), hasLength(70));
       final codes = arena.storefronts.map((s) => s.code).toList();
-      expect(codes.toSet(), hasLength(40));
+      expect(codes.toSet(), hasLength(10));
       expect(codes.every((c) => c.length <= 20), isTrue);
       final emails = arena.workers.map((w) => w.email).toList();
-      expect(emails.toSet(), hasLength(300));
+      expect(emails.toSet(), hasLength(102));
       expect(emails.every((e) => e.endsWith('@example.com')), isTrue);
       expect(arena.workers.every((w) => w.phone.contains('555-')), isTrue);
     });
@@ -219,7 +345,7 @@ void main() {
         for (final es in arena.eventStorefronts)
           if (es.isOpen) '${es.eventId}/${es.storefrontId}',
       };
-      expect(arena.eventStorefronts, hasLength(40 * arena.events.length));
+      expect(arena.eventStorefronts, hasLength(10 * arena.events.length));
       for (final s in arena.shifts) {
         expect(open, contains('${s.eventId}/${s.storefrontId}'));
       }
@@ -257,6 +383,52 @@ void main() {
   });
 
   group('scheduling rules', () {
+    test('nonprofit groups staff their home stands', () {
+      const home = ['EBS', 'AADOG'];
+      for (var g = 0; g < arena.npoGroups.length; g++) {
+        final group = arena.npoGroups[g];
+        final stand = arena.storefronts.singleWhere((s) => s.code == home[g]);
+        final theirs = staffed.where((s) => workers[s.workerId]!.npoGroupId == group.id).toList();
+        expect(theirs, isNotEmpty);
+        // Members work together, at their home stand.
+        expect(theirs.every((s) => s.storefrontId == stand.id), isTrue, reason: group.displayName);
+        // And most of the home stand's staff on those nights are the group.
+        final nights = theirs.map((s) => s.eventId).toSet();
+        final atStand = staffed.where((s) => nights.contains(s.eventId) && s.storefrontId == stand.id).length;
+        expect(theirs.length / atStand, greaterThan(0.6));
+      }
+      // Nobody else in a nonprofit works outside a group stand.
+      for (final s in staffed) {
+        final w = workers[s.workerId]!;
+        if (w.type == WorkerType.npo) expect(home, contains(storefronts[s.storefrontId]!.code));
+      }
+    });
+
+    test('small crowds close the Westside Bar and Grab & Go and use fewer people', () {
+      final closable = arena.storefronts.where((s) => s.code == 'WESTSIDE' || s.code == 'GRABGO').map((s) => s.id);
+      var sawSmall = false;
+      for (final e in arena.events) {
+        final open = arena.eventStorefronts.where((x) => x.eventId == e.id && x.isOpen).map((x) => x.storefrontId);
+        final needed = arena.eventStaffingNeeds.where((n) => n.eventId == e.id).fold<int>(0, (s, n) => s + n.count);
+        if (e.expectedAttendance < 3500) {
+          sawSmall = true;
+          expect(open.toSet().intersection(closable.toSet()), isEmpty, reason: e.name);
+          expect(open, hasLength(7));
+          expect(needed, lessThan(45));
+        } else {
+          expect(open, hasLength(9), reason: e.name);
+        }
+        for (final sf in open) {
+          final roles = arena.eventStaffingNeeds.where((n) => n.eventId == e.id && n.storefrontId == sf);
+          expect(roles.every((n) => n.count >= 1), isTrue);
+          if (storefronts[sf]!.kind != StorefrontKind.kiosk) {
+            expect(roles.where((n) => n.jobRoleCode == 'lead').single.count, 1);
+          }
+        }
+      }
+      expect(sawSmall, isTrue);
+    });
+
     test('nobody is booked twice in one event', () {
       final seen = <String>{};
       for (final s in staffed) {
@@ -343,7 +515,12 @@ void main() {
       final assigned = staffed.where((s) => s.eventId == live.id).toList();
       final clockedIn = punches.where((p) => p.kind == PunchKind.clockIn).map((p) => p.shiftId).toSet();
       final missing = assigned.where((s) => !clockedIn.contains(s.id)).length;
-      expect(missing, inInclusiveRange(4, 8));
+      expect(missing, inInclusiveRange(2, 4));
+      final late = assigned.where((s) {
+        final clockIn = punches.where((p) => p.shiftId == s.id && p.kind == PunchKind.clockIn);
+        return clockIn.isNotEmpty && clockIn.first.occurredAt.isAfter(s.callTime.add(const Duration(minutes: 5)));
+      }).length;
+      expect(late, inInclusiveRange(1, 2));
       final released = assigned.where((s) => s.status == ShiftStatus.released).toList();
       expect(released.length, inInclusiveRange(1, 2));
       final clockedOut = punches.where((p) => p.kind == PunchKind.clockOut).map((p) => p.shiftId).toSet();
