@@ -25,6 +25,11 @@ final deletionRequestsProvider = FutureProvider.autoDispose<List<DeletionRequest
   return _adminOf(ref).loadDeletionRequests(session);
 });
 
+final myVenuesProvider = FutureProvider.autoDispose<List<VenueSummary>>((ref) {
+  final session = ref.watch(sessionProvider)!;
+  return _adminOf(ref).listMyVenues(session);
+});
+
 AdminRepository _adminOf(Ref ref) => ref.read(repositoryProvider) as AdminRepository;
 
 /// A yes/no question before something that cannot be undone.
@@ -64,6 +69,7 @@ class AdminScreen extends ConsumerWidget {
             padding: const EdgeInsets.only(bottom: 48),
             children: [
               ScreenHeader(kicker: session.venue.name, title: 'Admin'),
+              const _CompanyCard(),
               if (canSettings) ...[
                 const SectionHeading('Venue and branding'),
                 _VenueCard(),
@@ -77,6 +83,60 @@ class AdminScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// The company this venue belongs to, and the other venues this person can work in.
+class _CompanyCard extends ConsumerWidget {
+  const _CompanyCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(sessionProvider)!;
+    final venues = ref.watch(myVenuesProvider);
+    return venues.when(
+      loading: () => const SizedBox.shrink(),
+      error: (e, _) => ErrorNote(e, onRetry: () => ref.invalidate(myVenuesProvider)),
+      data: (list) {
+        final company = list.firstWhere(
+          (v) => v.id == session.venue.id,
+          orElse: () => VenueSummary(id: session.venue.id, name: session.venue.name, organizationId: session.venue.organizationId),
+        );
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          SectionHeading(company.organizationName.isEmpty ? 'Company' : company.organizationName),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
+            child: Text(
+              list.length < 2
+                  ? 'You work in one venue: ${session.venue.name}.'
+                  : 'You work in ${list.length} venues. Everything else on this screen applies to the one you are in.',
+              style: AppText.meta,
+            ),
+          ),
+          for (final v in list)
+            ListTile(
+              dense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
+              title: Text(v.name),
+              trailing: v.id == session.venue.id
+                  ? const StatusTag('Current', Tone.good)
+                  : TextButton(onPressed: () => _switch(context, ref, v), child: const Text('Switch')),
+            ),
+        ]);
+      },
+    );
+  }
+
+  Future<void> _switch(BuildContext context, WidgetRef ref, VenueSummary venue) async {
+    try {
+      await _admin(ref).switchVenue(ref.read(sessionProvider)!, venue.id);
+      // The repository remembers the choice; restoring rebuilds the session around it.
+      await ref.read(sessionProvider.notifier).restore();
+      ref.invalidate(myVenuesProvider);
+      if (context.mounted) showMessage(context, 'Now in ${venue.name}');
+    } on AppFailure catch (e) {
+      if (context.mounted) showMessage(context, e.message);
+    }
   }
 }
 

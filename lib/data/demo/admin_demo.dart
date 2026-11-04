@@ -4,6 +4,23 @@ part of '../demo_repository.dart';
 /// migration 0023: only an admin changes settings or decides a request, nobody approves
 /// their own, and anonymising keeps the hours and clears the personal details.
 mixin _DemoAdmin on _DemoCore implements AdminRepository {
+  /// The demo is one venue, so there is nothing to switch to.
+  @override
+  Future<List<VenueSummary>> listMyVenues(AppSession session) => _delay(() => [
+        VenueSummary(
+          id: session.venue.id,
+          name: session.venue.name,
+          organizationId: session.venue.organizationId,
+          organizationName: 'Pecan Valley Concessions',
+        ),
+      ]);
+
+  @override
+  Future<AppSession> switchVenue(AppSession session, String venueId) => _delay(() {
+        if (venueId != session.venue.id) throw const AppFailure('The demo has one venue.');
+        return session;
+      });
+
   @override
   Future<void> saveVenueProfile(AppSession session, {String? name, String? timeZone, Map<String, dynamic>? branding}) => _delay(() {
         _requirePerm('manage_settings');

@@ -77,13 +77,18 @@ abstract class _SupabaseCore implements WorkforceRepository {
         return session;
       });
 
+  /// The venue chosen with [switchVenue], so a person in more than one venue stays where
+  /// they were instead of landing on whichever row comes back first.
+  String? _chosenVenueId;
+
   @override
   Future<AppSession?> restoreSession() async {
     final user = client.auth.currentUser;
     if (user == null) return null;
     final memberships = await client.from('venue_memberships').select('venue_id').eq('user_id', user.id).eq('status', 'active');
     if (memberships.isEmpty) return null;
-    final venueId = memberships.first['venue_id'] as String;
+    final ids = [for (final m in memberships) m['venue_id'] as String];
+    final venueId = ids.contains(_chosenVenueId) ? _chosenVenueId! : ids.first;
     final venueRow = await client.from('venues').select().eq('id', venueId).single();
     final profile = await client.from('user_profiles').select().eq('id', user.id).maybeSingle();
     final roles = await client.from('venue_roles').select('code, permissions').eq('venue_id', venueId);
@@ -112,7 +117,10 @@ abstract class _SupabaseCore implements WorkforceRepository {
   }
 
   @override
-  Future<void> signOut() => client.auth.signOut();
+  Future<void> signOut() {
+    _chosenVenueId = null;
+    return client.auth.signOut();
+  }
 
   // ---- Venue ----
 

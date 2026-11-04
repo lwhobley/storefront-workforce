@@ -124,11 +124,26 @@ void main() {
     });
   });
 
+  test('venues: the demo has one, and switching to another is refused', () async {
+    final r = repo();
+    final session = await r.signInWithPin('100001');
+    final venues = await r.listMyVenues(session);
+    expect(venues.single.id, session.venue.id);
+    expect(venues.single.organizationId, session.venue.organizationId);
+    expect((await r.switchVenue(session, session.venue.id)).venue.id, session.venue.id);
+    await expectLater(r.switchVenue(session, 'some-other-venue'), throwsA(isA<AppFailure>()));
+  });
+
   test('venue profile and branding are saved by an admin only', () async {
     final r = repo();
     final admin = await r.signInWithPin('100001');
     await r.saveVenueProfile(admin, name: 'Pecan Valley Arena', branding: {'app_name': 'PV Staff', 'primary_color': '#1D4ED8'});
     await expectLater(r.saveVenueProfile(admin, name: '   '), throwsA(isA<AppFailure>()));
+
+    // The change is visible straight away, as it would be after a reload.
+    final after = (await r.restoreSession())!;
+    expect(after.venue.name, 'Pecan Valley Arena');
+    expect(after.venue.branding['app_name'], 'PV Staff');
 
     await r.signOut();
     final employee = await r.signInWithPin('400004');

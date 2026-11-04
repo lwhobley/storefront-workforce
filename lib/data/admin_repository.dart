@@ -7,6 +7,13 @@ import 'models.dart';
 /// kept for the retention period. Approving a request anonymises the person instead, so
 /// their hours and pay stay attached to a record with no personal details.
 abstract interface class AdminRepository {
+  /// Every venue the signed-in person belongs to, by name. One entry is the usual case.
+  Future<List<VenueSummary>> listMyVenues(AppSession session);
+
+  /// Moves to another venue the person belongs to, and returns the new session.
+  /// Throws [AppFailure] when they are not a member of it.
+  Future<AppSession> switchVenue(AppSession session, String venueId);
+
   /// Venue name, time zone and branding. Needs manage_settings.
   Future<void> saveVenueProfile(AppSession session, {String? name, String? timeZone, Map<String, dynamic>? branding});
 
@@ -34,6 +41,16 @@ abstract interface class AdminRepository {
 
   /// Refuses a request, with a reason. Needs manage_settings.
   Future<void> refuseDataDeletion(AppSession session, String requestId, String reason);
+}
+
+/// One venue a person belongs to.
+class VenueSummary {
+  const VenueSummary({required this.id, required this.name, required this.organizationId, this.organizationName = ''});
+
+  final String id;
+  final String name;
+  final String organizationId;
+  final String organizationName;
 }
 
 /// How long records are kept, in months.

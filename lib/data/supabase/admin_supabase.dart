@@ -5,6 +5,40 @@ part of '../supabase_repository.dart';
 /// nobody may approve their own.
 mixin _SupabaseAdmin on _SupabaseCore implements AdminRepository {
   @override
+  Future<List<VenueSummary>> listMyVenues(AppSession session) => _guard(() async {
+        final user = client.auth.currentUser;
+        if (user == null) return const <VenueSummary>[];
+        final rows = await client
+            .from('venue_memberships')
+            .select('venue_id, venues(id, name, organization_id, organizations(name))')
+            .eq('user_id', user.id)
+            .eq('status', 'active');
+        final out = <VenueSummary>[];
+        for (final r in rows) {
+          final v = r['venues'] as Map<String, dynamic>?;
+          if (v == null) continue;
+          out.add(VenueSummary(
+            id: v['id'] as String,
+            name: v['name'] as String,
+            organizationId: v['organization_id'] as String,
+            organizationName: ((v['organizations'] as Map?)?['name'] as String?) ?? '',
+          ));
+        }
+        out.sort((a, b) => a.name.compareTo(b.name));
+        return out;
+      });
+
+  @override
+  Future<AppSession> switchVenue(AppSession session, String venueId) => _guard(() async {
+        final mine = await listMyVenues(session);
+        if (!mine.any((v) => v.id == venueId)) throw const AppFailure('You are not a member of that venue.');
+        _chosenVenueId = venueId;
+        final next = await restoreSession();
+        if (next == null) throw const AppFailure('That venue is no longer available.');
+        return next;
+      });
+
+  @override
   Future<void> saveVenueProfile(AppSession session, {String? name, String? timeZone, Map<String, dynamic>? branding}) =>
       _guard(() async {
         final patch = <String, dynamic>{
