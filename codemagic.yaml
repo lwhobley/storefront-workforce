@@ -14,11 +14,16 @@
 # One-time setup in Codemagic (Teams > your team):
 #   Android  codemagic.yaml settings > Code signing identities > Android keystores:
 #            upload the upload keystore with the reference name  storefront_upload_key
-#   iOS      Team integrations > Developer Portal > Manage keys: add the App Store Connect
-#            API key with the name  storefront_workforce
-#            codemagic.yaml settings > Code signing identities > iOS certificates: generate
-#            or upload an Apple Distribution certificate, and fetch the App Store
-#            provisioning profile for app.loungeability.storefrontWorkforce
+#   iOS      The App Store Connect API key is the existing  Venue Wrangler Wine  integration
+#            (one key covers the whole Apple team). Code signing identities hold the
+#            Apple Distribution certificate  storefront_distribution  (generated in
+#            Codemagic, expires 2027/11/05) and the App Store profile  storefront_app_store
+#            ("Storefront Workforce APNs" in the Apple portal, Push Notifications on).
+#            They are named explicitly below so an older profile for the same bundle id
+#            that has no matching certificate is never picked. When the certificate is
+#            renewed, regenerate that profile with it and fetch it again.
+#            The Apple team is at its limit of distribution certificates: making a new one
+#            means revoking an old one first.
 #
 # The app's bundle id needs the Push Notifications capability turned on in the Apple
 # Developer portal before that provisioning profile is created, or push will not work.
@@ -103,13 +108,15 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 90
     integrations:
-      app_store_connect: storefront_workforce
+      app_store_connect: Venue Wrangler Wine
     environment:
       flutter: 3.47.9
       xcode: latest
       ios_signing:
-        distribution_type: app_store
-        bundle_identifier: app.loungeability.storefrontWorkforce
+        provisioning_profiles:
+          - storefront_app_store
+        certificates:
+          - storefront_distribution
       vars:
         SUPABASE_URL: https://dhmxrojpkjuhhmpqyljp.supabase.co
         SUPABASE_PUBLISHABLE_KEY: sb_publishable_WyKa6QIBvUpJ5dNPgQXt1Q_ZFMOdVB6
