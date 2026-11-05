@@ -32,6 +32,8 @@
 	<string>Storefront Workforce lets you choose a photo of a document or of a certification card from your library to attach it.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Storefront Workforce checks your location when you clock in or out, to confirm you are at the venue when your manager has turned that check on.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Storefront Workforce checks your location only while the app is open, when you clock in or out, to confirm you are at the venue when your manager has turned that check on. It does not track your location in the background.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
