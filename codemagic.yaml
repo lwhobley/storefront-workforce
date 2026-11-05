@@ -8,6 +8,9 @@
 # Release with:  git tag v0.1.0 && git push origin v0.1.0
 # or start any workflow by hand from the Codemagic dashboard.
 #
+# Every workflow runs on mac_mini_m2: the free personal plan includes 500 macOS minutes a
+# month and no Linux machines (a linux_x2 build fails before it starts).
+#
 # One-time setup in Codemagic (Teams > your team):
 #   Android  codemagic.yaml settings > Code signing identities > Android keystores:
 #            upload the upload keystore with the reference name  storefront_upload_key
@@ -25,7 +28,7 @@
 workflows:
   checks:
     name: Checks
-    instance_type: linux_x2
+    instance_type: mac_mini_m2
     max_build_duration: 30
     environment:
       flutter: 3.47.9
@@ -49,7 +52,7 @@ workflows:
 
   android-release:
     name: Android release
-    instance_type: linux_x2
+    instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
       flutter: 3.47.9
