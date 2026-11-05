@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:workforce_core/workforce_core.dart';
 
 import '../core/i18n/strings.dart';
+import '../core/push/push_service.dart';
+import '../data/comms_repository.dart';
 import '../data/models.dart';
 import '../data/workforce_repository.dart';
 
@@ -20,6 +22,9 @@ final clockProvider = StreamProvider<DateTime>((ref) async* {
 
 DateTime nowFrom(Ref ref) => ref.watch(clockProvider).value ?? DateTime.now().toUtc();
 
+/// Set in main() where Firebase is configured; everywhere else push does nothing.
+final pushServiceProvider = Provider<PushService>((ref) => const NoPushService());
+
 final sessionProvider = NotifierProvider<SessionController, AppSession?>(SessionController.new);
 
 class SessionController extends Notifier<AppSession?> {
@@ -27,6 +32,21 @@ class SessionController extends Notifier<AppSession?> {
   AppSession? build() => null;
 
   WorkforceRepository get _repo => ref.read(repositoryProvider);
+
+  PushRegistration? _pushRegistration;
+
+  /// Keeps this device's push token registered while someone is signed in.
+  PushRegistration get _push => _pushRegistration ??= PushRegistration(
+        ref.read(pushServiceProvider),
+        register: (token, platform) async {
+          final session = state;
+          if (session != null) await (_repo as CommsRepository).registerPushToken(session, token, platform);
+        },
+        remove: (token, platform) async {
+          final session = state;
+          if (session != null) await (_repo as CommsRepository).removePushToken(session, token);
+        },
+      );
 
   Future<void> restore() async {
     try {
@@ -43,13 +63,18 @@ class SessionController extends Notifier<AppSession?> {
   }
 
   Future<void> signOut() async {
+    // While the session still works, so the server can drop this device's token.
+    await _push.signedOut();
     await _repo.signOut();
     state = null;
   }
 
   void _set(AppSession? session) {
     state = session;
-    if (session != null) ref.read(languageProvider.notifier).set(session.language);
+    if (session == null) return;
+    ref.read(languageProvider.notifier).set(session.language);
+    // A shared kiosk tablet has no person to notify.
+    if (!session.isKiosk) unawaited(_push.signedIn());
   }
 }
 

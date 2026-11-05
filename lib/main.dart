@@ -5,6 +5,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app/app.dart';
 import 'app/providers.dart';
+import 'app/router.dart';
+import 'core/push/firebase_push.dart';
+import 'core/push/push_service.dart';
 import 'data/demo_repository.dart';
 import 'data/supabase_repository.dart';
 import 'data/workforce_repository.dart';
@@ -27,7 +30,19 @@ Future<void> main() async {
   } else {
     repo = DemoWorkforceRepository();
   }
-  final container = ProviderContainer(overrides: [repositoryProvider.overrideWithValue(repo)]);
+  // Push only with a real backend: the demo has nowhere to send a token.
+  final push = repo.isDemo ? const NoPushService() : await FirebasePushService.create();
+  final container = ProviderContainer(overrides: [
+    repositoryProvider.overrideWithValue(repo),
+    pushServiceProvider.overrideWithValue(push),
+  ]);
+
+  // Tapping a notification opens the screen it is about. Waits for the first frame so the
+  // router is on screen, which also covers the app being launched by the tap.
+  push.taps.listen((link) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => container.read(routerProvider).go(link));
+  });
+
   await container.read(sessionProvider.notifier).restore();
   runApp(UncontrolledProviderScope(container: container, child: const WorkforceApp()));
 }
