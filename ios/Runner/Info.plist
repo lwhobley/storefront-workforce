@@ -26,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Storefront Workforce uses the camera to take a photo when you clock in or out, to photograph checklist items and incidents, and to photograph your certification cards.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Storefront Workforce lets you choose a photo of a document or of a certification card from your library to attach it.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Storefront Workforce checks your location when you clock in or out, to confirm you are at the venue when your manager has turned that check on.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
