@@ -29,11 +29,31 @@ android {
         versionName = flutter.versionName
     }
 
+    // Codemagic exports the upload keystore through these variables. Without them (local
+    // builds) releases keep using the debug key so `flutter run --release` still works.
+    // The release workflow refuses to build without a keystore, so a debug-signed bundle
+    // cannot reach Google Play by accident.
+    val uploadKeystorePath: String? = System.getenv("CM_KEYSTORE_PATH")
+    val signWithUploadKey = !uploadKeystorePath.isNullOrEmpty()
+
+    signingConfigs {
+        if (signWithUploadKey) {
+            create("release") {
+                storeFile = file(uploadKeystorePath!!)
+                storePassword = System.getenv("CM_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("CM_KEY_ALIAS")
+                keyPassword = System.getenv("CM_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (signWithUploadKey) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
