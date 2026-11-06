@@ -51,8 +51,17 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   alignment: Alignment.centerRight,
                   child: TextButton(onPressed: () => ref.read(languageProvider.notifier).toggle(), child: Text(t.language)),
                 ),
-                Text(t.appName.toUpperCase(), style: AppText.kicker),
-                const SizedBox(height: 6),
+                // The logo carries the app name, so it replaces the name line.
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Image.asset(
+                    'assets/branding/logo.jpg',
+                    width: 168,
+                    semanticLabel: t.appName,
+                    errorBuilder: (_, _, _) => Text(t.appName.toUpperCase(), style: AppText.kicker),
+                  ),
+                ),
+                const SizedBox(height: AppSpace.l),
                 Text(t.enterPin, style: AppText.screenTitle, textAlign: TextAlign.center),
                 const SizedBox(height: 6),
                 Text(t.pinHelp, style: AppText.meta, textAlign: TextAlign.center),

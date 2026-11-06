@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/i18n/strings.dart';
 import '../core/theme/app_theme.dart';
 import '../features/clock/punch_queue.dart';
+import 'intro_video.dart';
 import 'providers.dart';
 import 'router.dart';
 
@@ -27,6 +28,8 @@ class WorkforceApp extends ConsumerWidget {
       locale: Locale(lang),
       supportedLocales: const [Locale('en'), Locale('es')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      // Brand intro over the first screen; sign-in keeps loading underneath.
+      builder: (context, child) => IntroGate(child: child ?? const SizedBox.shrink()),
     );
   }
 }
