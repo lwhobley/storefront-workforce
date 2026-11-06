@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Storefront Workforce uses the camera to take a photo when you clock in or out, to photograph checklist items and incidents, and to photograph your certification cards.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
