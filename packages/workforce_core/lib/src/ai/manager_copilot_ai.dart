@@ -26,12 +26,14 @@ class CopilotResponse {
     required this.answer,
     this.actionPills = const [],
     this.suggestedFollowUps = const [],
+    this.isGeminiPowered = false,
   });
 
   final String query;
   final String answer;
   final List<CopilotActionPill> actionPills;
   final List<String> suggestedFollowUps;
+  final bool isGeminiPowered;
 }
 
 abstract final class ManagerCopilotAI {

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:workforce_core/workforce_core.dart';
 
+import '../../core/ai/gemini_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/common.dart';
 
@@ -62,16 +64,32 @@ Status: ACTIVE & VERIFIED
     super.dispose();
   }
 
-  void _analyze() {
+  Future<void> _analyze() async {
     final text = _ocrController.text;
-    final res = CardVisionAI.analyzeCard(
+    CardVerificationResult? res;
+    try {
+      final gemini = ProviderScope.containerOf(context, listen: false).read(geminiServiceProvider);
+      if (gemini.isConfigured) {
+        res = await gemini.analyzeCardWithGemini(
+          worker: widget.worker,
+          certTypeCode: widget.certTypeCode,
+          certName: widget.certName,
+          rawOcrText: text,
+          onDate: DateTime.now().toUtc(),
+        );
+      }
+    } catch (_) {}
+
+    res ??= CardVisionAI.analyzeCard(
       rawOcrText: text,
       worker: widget.worker,
       certTypeCode: widget.certTypeCode,
       certName: widget.certName,
       onDate: DateTime.now().toUtc(),
     );
-    setState(() => _result = res);
+    if (mounted) {
+      setState(() => _result = res);
+    }
   }
 
   @override

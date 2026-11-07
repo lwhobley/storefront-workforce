@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:storefront_workforce/app/providers.dart';
+import 'package:storefront_workforce/core/ai/gemini_service.dart';
 import 'package:storefront_workforce/data/demo_repository.dart';
 import 'package:storefront_workforce/features/copilot/manager_copilot_sheet.dart';
 import 'package:storefront_workforce/features/people/ai_card_scan_dialog.dart';
@@ -111,5 +113,27 @@ void main() {
     expect(osha.isOshaRecordable, isTrue);
     expect(osha.category.toLowerCase(), contains('laceration'));
     expect(osha.actions, isNotEmpty);
+  });
+
+  test('GeminiService and key notifier configure and fall back safely', () async {
+    SharedPreferences.setMockInitialValues({});
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final initialKey = container.read(geminiApiKeyProvider);
+    expect(initialKey, isEmpty);
+
+    final service = container.read(geminiServiceProvider);
+    expect(service.isConfigured, isFalse);
+
+    // Setting a key updates state
+    await container.read(geminiApiKeyProvider.notifier).setKey('AIzaSyTestKey123');
+    expect(container.read(geminiApiKeyProvider), 'AIzaSyTestKey123');
+    expect(container.read(geminiServiceProvider).isConfigured, isTrue);
+
+    // Clearing key restores fallback
+    await container.read(geminiApiKeyProvider.notifier).setKey('');
+    expect(container.read(geminiApiKeyProvider), isEmpty);
+    expect(container.read(geminiServiceProvider).isConfigured, isFalse);
   });
 }

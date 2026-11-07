@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:workforce_core/workforce_core.dart';
 
 import '../../app/providers.dart';
+import '../../core/ai/gemini_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/common.dart';
 import '../../data/comms_repository.dart';
@@ -210,10 +211,15 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
             ActionChip(
               avatar: const Icon(Icons.translate, size: 16, color: AppColors.good),
               label: const Text('AI Translate (EN ↔ ES)'),
-              onPressed: () {
+              onPressed: () async {
                 if (_body.text.trim().isEmpty) return;
-                final translated = IncidentAssistantAI.translateConcourseMessage(_body.text);
-                setState(() => _body.text = translated);
+                final gemini = ref.read(geminiServiceProvider);
+                String? translated;
+                if (gemini.isConfigured) {
+                  translated = await gemini.translateConcourseText(_body.text);
+                }
+                translated ??= IncidentAssistantAI.translateConcourseMessage(_body.text);
+                if (mounted) setState(() => _body.text = translated!);
               },
             ),
           ],
