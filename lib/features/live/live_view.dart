@@ -270,7 +270,7 @@ class _Attention extends ConsumerWidget {
                   title: Text('${m.workerName}: ${venue.storefront(m.fromStorefrontId)?.name ?? m.fromStorefrontId} → ${venue.storefront(m.toStorefrontId)?.name ?? m.toStorefrontId}'),
                   subtitle: Text('${venue.roleName(m.jobRoleCode)} · ${m.reason}'),
                   trailing: FilledButton.tonal(
-                    visualDensity: VisualDensity.compact,
+                    style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
                     onPressed: () async {
                       final shift = board.shifts.where((s) => s.workerId == m.workerId).firstOrNull;
                       if (shift != null) {
@@ -417,7 +417,7 @@ class _Attention extends ConsumerWidget {
               ? const Center(child: Text('No off-duty qualified candidates found with 0 overtime risk.'))
               : ListView.separated(
                   itemCount: candidates.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (_, i) {
                     final cand = candidates[i];
                     return ListTile(

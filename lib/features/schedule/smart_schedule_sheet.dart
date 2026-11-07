@@ -106,7 +106,7 @@ class _SmartScheduleSheetState extends ConsumerState<SmartScheduleSheet> {
                     Text('AI Smart Schedule', style: AppText.sectionHeading),
                     const Text(
                       'Optimizes open positions based on availability, rotation, and overtime prevention.',
-                      style: TextStyle(fontSize: 12, color: AppColors.subtle),
+                      style: TextStyle(fontSize: 12, color: AppColors.muted),
                     ),
                   ],
                 ),
@@ -364,7 +364,7 @@ class _MetricCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.subtle, fontWeight: FontWeight.w600)),
+          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.muted, fontWeight: FontWeight.w600)),
           const SizedBox(height: 2),
           Text(value, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: fg)),
           const SizedBox(height: 2),

@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:storefront_workforce/data/demo_repository.dart';
-import 'package:storefront_workforce/data/shift_market_repository.dart';
 import 'package:workforce_core/workforce_core.dart';
 
 void main() {

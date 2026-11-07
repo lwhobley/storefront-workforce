@@ -5,9 +5,6 @@ import 'package:workforce_core/workforce_core.dart';
 
 import '../../app/providers.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/common.dart';
-import '../../data/models.dart';
-import '../live/live_model.dart';
 
 /// Shows the Manager Copilot AI assistant bottom sheet.
 Future<void> showManagerCopilotSheet(BuildContext context) {

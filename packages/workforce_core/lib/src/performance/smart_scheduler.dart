@@ -400,12 +400,12 @@ abstract final class SmartScheduler {
         reasons.add('Fresh rotation (0 recent shifts)');
       } else if (recentShifts <= 2) {
         totalScore += 12.0;
-        reasons.add('Balanced workload (${recentShifts} recent shifts)');
+        reasons.add('Balanced workload ($recentShifts recent shifts)');
       } else if (recentShifts <= 5) {
         totalScore += 7.0;
       } else {
         totalScore += 2.0;
-        warnings.add('High recent workload (${recentShifts} shifts)');
+        warnings.add('High recent workload ($recentShifts shifts)');
       }
     } else {
       totalScore += 15.0;
@@ -510,9 +510,6 @@ abstract final class SmartScheduler {
     // Dynamic state tracker for candidate profiles during assignment
     final dynamicHours = <String, double>{
       for (final p in candidateProfiles) p.workerId: p.currentWeekHours,
-    };
-    final profilesById = <String, WorkerScheduleProfile>{
-      for (final p in candidateProfiles) p.workerId: p,
     };
 
     // Sort open shifts by Minimum Remaining Values (MRV) / scarcity:

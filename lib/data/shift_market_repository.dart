@@ -2,7 +2,6 @@ import 'package:workforce_core/workforce_core.dart';
 
 import 'shift_market_models.dart';
 
-export 'package:workforce_core/workforce_core.dart';
 export 'shift_market_models.dart';
 
 /// Phase 3: Open shifts, pickups, drops, swaps, availability, and their approvals.

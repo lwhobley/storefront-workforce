@@ -195,8 +195,9 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
               rows.sort((a, b) {
                 final blocked = (a.$2.blocks.isEmpty ? 0 : 1).compareTo(b.$2.blocks.isEmpty ? 0 : 1);
                 if (blocked != 0) return blocked;
-                final said = a.$3.rank.compareTo(b.$3.rank);
-                return b.$4.score.compareTo(a.$4.score);
+                final byFit = b.$4.score.compareTo(a.$4.score);
+                if (byFit != 0) return byFit;
+                return a.$3.rank.compareTo(b.$3.rank);
               });
               if (rows.isEmpty) return const EmptyNote('No one available. Turn off "Hide blocked" to see why.');
               return ListView.separated(

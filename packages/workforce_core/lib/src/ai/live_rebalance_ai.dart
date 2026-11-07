@@ -9,7 +9,6 @@ import '../model/entities.dart';
 import '../model/enums.dart';
 import '../rules/certifications.dart';
 import '../rules/local_time.dart';
-import '../rules/minors.dart';
 import '../rules/venue_rules.dart';
 
 /// A proposed transfer of a worker from one storefront to another during a live event.
@@ -44,6 +43,8 @@ class RebalanceRecommendation {
   final int priorityScore;
 
   final bool isCertified;
+
+  String get jobRoleCode => roleCode;
 }
 
 /// An off-duty worker recommended to fill an emergency no-show or late opening.
@@ -73,6 +74,18 @@ class EmergencyReplacementRecommendation {
   final bool isAvailable;
   final List<String> reasons;
   final int score;
+
+  double get suitabilityScore => score / 100.0;
+  double get weeklyHoursBeforeShift => currentWeeklyHours;
+  Worker get worker => Worker(
+        id: workerId,
+        venueId: '',
+        type: workerType,
+        employeeNumber: '',
+        firstName: workerName.split(' ').first,
+        lastName: workerName.contains(' ') ? workerName.split(' ').sublist(1).join(' ') : '',
+        phone: phone,
+      );
 }
 
 abstract final class LiveRebalanceAI {
@@ -265,5 +278,44 @@ abstract final class LiveRebalanceAI {
 
     candidates.sort((a, b) => b.score.compareTo(a.score));
     return candidates.take(6).toList();
+  }
+
+  /// Convenience facade for live view emergency replacement lookup.
+  static List<EmergencyReplacementRecommendation> recommendEmergencyReplacements({
+    required Shift openShift,
+    required Event event,
+    required List<Worker> availableWorkers,
+    required List<Shift> allWeeklyShifts,
+    required VenueRules rules,
+    required String timeZone,
+    DateTime? onDate,
+  }) {
+    final scheduledIds = {
+      for (final s in allWeeklyShifts)
+        if (s.eventId == event.id && s.workerId != null) s.workerId!,
+    };
+    final hours = <String, double>{};
+    for (final s in allWeeklyShifts) {
+      if (s.workerId != null) {
+        hours[s.workerId!] = (hours[s.workerId!] ?? 0) + 4.0;
+      }
+    }
+    final targetRole = JobRole(
+      venueId: event.venueId,
+      code: openShift.jobRoleCode,
+      name: openShift.jobRoleCode,
+      requiredCertifications: const [],
+    );
+
+    return findEmergencyReplacements(
+      shift: openShift,
+      event: event,
+      role: targetRole,
+      allActiveWorkers: availableWorkers,
+      scheduledWorkerIdsForEvent: scheduledIds,
+      currentWorkweekHours: hours,
+      rules: rules,
+      timeZone: timeZone,
+    );
   }
 }

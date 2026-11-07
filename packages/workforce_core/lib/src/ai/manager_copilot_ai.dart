@@ -94,8 +94,7 @@ All breaks of 20 minutes or less are recorded as paid rest under venue rules.
 
       final text = expiring.isEmpty
           ? 'All active staff have valid certifications on file. Zero TABC or Food Handler cards expire in the next 30 days.'
-          : '**${expiring.length} worker(s)** have certifications expired or expiring within 30 days:\n' +
-              expiring.take(4).map((w) => '• **${w.displayName}** (${w.employeeNumber})').join('\n');
+          : '**${expiring.length} worker(s)** have certifications expired or expiring within 30 days:\n${expiring.take(4).map((w) => '• **${w.displayName}** (${w.employeeNumber})').join('\n')}';
 
       return CopilotResponse(
         query: query,
@@ -140,7 +139,7 @@ To review wage distributions, tip credits, or approved period lines, see the Pay
 
       final answer = openShifts.isEmpty
           ? 'All **$totalShifts** positions are fully staffed for this event.'
-          : 'There are **${openShifts.length} open position(s)** out of $totalShifts total scheduled shifts.\n' +
+          : 'There are **${openShifts.length} open position(s)** out of $totalShifts total scheduled shifts.\n'
               'You can use **AI Auto-Schedule** on the schedule screen to automatically fill these with qualified staff without causing overtime.';
 
       return CopilotResponse(
