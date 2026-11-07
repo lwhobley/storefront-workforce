@@ -12,6 +12,7 @@ import '../../data/shift_market_repository.dart';
 import '../performance/staffing_suggestions_sheet.dart';
 import '../shift_market/market_providers.dart';
 import 'schedule_actions.dart';
+import 'smart_schedule_sheet.dart';
 
 /// Builds the event's schedule: which storefronts open, how many people each needs by
 /// role, and who fills each position.
@@ -191,6 +192,12 @@ class _ScheduleViewState extends ConsumerState<ScheduleView> {
                           onPressed: _generate,
                           icon: const Icon(Icons.playlist_add),
                           label: Text(missingPositions > 0 ? 'Create $missingPositions open positions' : 'Create open positions'),
+                        ),
+                      if (canSchedule && positions.any((s) => s.isOpen))
+                        FilledButton.tonalIcon(
+                          onPressed: () => showSmartScheduleSheet(context, ref, event.id),
+                          icon: const Icon(Icons.auto_awesome),
+                          label: const Text('AI Auto-Schedule'),
                         ),
                       if (session.canVenueWide(Perm.manageSchedule) && event.status != EventStatus.completed)
                         OutlinedButton.icon(

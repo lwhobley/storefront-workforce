@@ -26,6 +26,7 @@ import '../features/operations/incidents_screen.dart';
 import '../features/operations/ops_queue.dart';
 import '../features/reports/event_report_screen.dart';
 import '../features/reports/reports_screen.dart';
+import '../features/copilot/manager_copilot_sheet.dart';
 import 'more_screen.dart';
 import 'providers.dart';
 
@@ -60,6 +61,7 @@ List<NavItem> navFor(AppSession s) {
     if (s.canVenueWide('manage_settings')) const NavItem('/admin', 'Admin', Icons.settings_outlined),
     if (s.isManagerView) const NavItem('/checklists', 'Checklists', Icons.checklist),
     if (s.isManagerView) const NavItem('/incidents', 'Incidents', Icons.report_outlined),
+    if (s.isManagerView) const NavItem('/copilot', 'AI Copilot', Icons.auto_awesome),
     if (s.workerId != null && s.isManagerView) ...[
       const NavItem('/clock', 'My shift', Icons.punch_clock_outlined),
       const NavItem('/schedule', 'My schedule', Icons.calendar_month_outlined),
@@ -131,6 +133,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/checklists', builder: (_, _) => const ChecklistsScreen()),
           GoRoute(path: '/incidents', builder: (_, _) => const IncidentsScreen()),
           GoRoute(path: '/admin', builder: (_, _) => const AdminScreen()),
+          GoRoute(path: '/copilot', builder: (_, _) => const ManagerCopilotSheet()),
         ],
       ),
     ],

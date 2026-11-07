@@ -65,6 +65,33 @@ class _IncidentFormState extends ConsumerState<IncidentForm> {
   final List<IncidentPerson> _people = [];
   final List<Uint8List> _photos = [];
   bool _saving = false;
+  StructuredIncidentAnalysis? _oshaResult;
+
+  void _runAiOshaAnalysis() {
+    final text = _description.text.trim();
+    if (text.isEmpty) {
+      showMessage(context, 'Enter incident details first to analyze.');
+      return;
+    }
+    final res = IncidentAssistantAI.analyzeIncidentNotes(text);
+    setState(() {
+      _oshaResult = res;
+      if (res.isOshaRecordable) {
+        _severity = IncidentSeverity.high;
+      }
+    });
+  }
+
+  void _applyFormattedSummary() {
+    if (_oshaResult == null) return;
+    setState(() {
+      _description.text = '''Summary: ${_oshaResult!.structuredSummary}
+Root Cause: ${_oshaResult!.rootCause}
+OSHA Classification: ${_oshaResult!.isOshaRecordable ? 'OSHA 300 Recordable (${_oshaResult!.category})' : 'First Aid Only'}
+Actions: ${_oshaResult!.actions.join('; ')}
+'''.trim();
+    });
+  }
 
   Future<void> _pickTime(String zone) async {
     final local = atVenue(_occurredAt, zone);
@@ -224,13 +251,76 @@ class _IncidentFormState extends ConsumerState<IncidentForm> {
                 trailing: TextButton(onPressed: () => _pickTime(zone), child: const Text('Change')),
               ),
               const SizedBox(height: AppSpace.s),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Description', style: AppText.kicker),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                    icon: const Icon(Icons.auto_awesome, size: 16),
+                    label: const Text('AI OSHA Review & Summary'),
+                    onPressed: _runAiOshaAnalysis,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
               TextField(
                 controller: _description,
                 minLines: 4,
                 maxLines: 10,
                 maxLength: 4000,
-                decoration: const InputDecoration(labelText: 'Description', hintText: 'What happened, who helped, what was done', alignLabelWithHint: true),
+                decoration: const InputDecoration(hintText: 'What happened, who helped, what was done', alignLabelWithHint: true),
               ),
+              if (_oshaResult != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _oshaResult!.isOshaRecordable ? AppColors.badSoft : AppColors.goodSoft,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _oshaResult!.isOshaRecordable ? AppColors.bad : AppColors.good,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                _oshaResult!.isOshaRecordable ? Icons.warning_amber : Icons.verified_user_outlined,
+                                color: _oshaResult!.isOshaRecordable ? AppColors.bad : AppColors.good,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _oshaResult!.isOshaRecordable ? 'OSHA 300 Recordable' : 'First Aid Only',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: _oshaResult!.isOshaRecordable ? AppColors.bad : AppColors.good,
+                                ),
+                              ),
+                            ],
+                          ),
+                          TextButton(
+                            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                            onPressed: _applyFormattedSummary,
+                            child: const Text('Insert Summary'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text('Category: ${_oshaResult!.category}', style: AppText.meta.copyWith(fontWeight: FontWeight.w600)),
+                      Text('Summary: ${_oshaResult!.structuredSummary}', style: AppText.body),
+                      const SizedBox(height: 4),
+                      Text('Root Cause: ${_oshaResult!.rootCause}', style: AppText.meta),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: AppSpace.s),
               const Text('People involved', style: AppText.kicker),
               const SizedBox(height: 6),

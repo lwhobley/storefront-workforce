@@ -1,5 +1,8 @@
+import 'package:workforce_core/workforce_core.dart';
+
 import 'shift_market_models.dart';
 
+export 'package:workforce_core/workforce_core.dart';
 export 'shift_market_models.dart';
 
 /// Phase 3: Open shifts, pickups, drops, swaps, availability, and their approvals.
@@ -56,4 +59,26 @@ abstract interface class ShiftMarketRepository {
   /// Assignment candidates with what each said about the event (available, unavailable,
   /// blackout).
   Future<List<MarketCandidate>> candidatesWithAvailability(String eventId, String jobRole);
+
+  // ---- AI Smart Scheduling ----
+
+  /// Generates an AI-optimized schedule plan for the given event, balancing availability,
+  /// rotation of employees, and overtime prevention.
+  Future<ScheduleOptimizationPlan> generateSmartSchedule(
+    String eventId, {
+    SmartSchedulerConstraints constraints = const SmartSchedulerConstraints(),
+  });
+
+  /// Evaluates an AI fit score for each candidate for an individual shift.
+  Future<List<CandidateFitScore>> scoreCandidatesForShift(
+    Shift shift,
+    List<MarketCandidate> candidates, {
+    SmartSchedulerConstraints constraints = const SmartSchedulerConstraints(),
+  });
+
+  /// Applies the proposed assignments from an optimization plan in batch.
+  Future<int> applySmartSchedule(
+    String eventId,
+    List<ShiftAssignmentProposal> proposals,
+  );
 }

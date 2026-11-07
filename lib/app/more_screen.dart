@@ -5,6 +5,7 @@ import '../core/i18n/strings.dart';
 import '../core/theme/app_theme.dart';
 import '../core/widgets/common.dart';
 import '../features/clock/punch_queue.dart';
+import '../features/copilot/manager_copilot_sheet.dart';
 import 'package:go_router/go_router.dart';
 
 import 'providers.dart';
@@ -34,6 +35,15 @@ class MoreScreen extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.go(item.path),
                 ),
+            if (session.isManagerView)
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
+                leading: const Icon(Icons.auto_awesome, color: AppColors.good),
+                title: const Text('Manager AI Copilot'),
+                subtitle: const Text('Operations assistant for concourse breaks, open shifts, certs & budget'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => showManagerCopilotSheet(context),
+              ),
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.screen),
               leading: const Icon(Icons.translate),

@@ -24,11 +24,33 @@ class LiveKpiStrip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final targets = ref.watch(reportTargetsProvider).value ?? ReportTargets.defaults;
     final m = liveKpis(board: board, cards: cards, rules: rules, now: now, needed: needed, assigned: assigned);
+    final runaway = LaborForecastAI.trackLiveLaborRunaway(
+      event: board.event,
+      shifts: board.shifts,
+      punches: board.punches,
+      now: now,
+      rules: rules,
+    );
     final chips = [
       _chip('Fill', pct(m.fillRate), ragTone(targets.fill(m.fillRate)), 'target ${pct(targets.fillGreen)}'),
       _chip('On time', pct(m.onTimeRate), ragTone(targets.attendance(m.onTimeRate)), 'target ${pct(targets.attendanceGreen)}'),
       _chip('Missing', '${m.missing}', m.missing == 0 ? Tone.good : Tone.bad, null),
       _chip('Near overtime', '${m.nearOvertime}', m.nearOvertime == 0 ? Tone.good : Tone.warn, null),
+      if (runaway.budgetCents > 0)
+        _chip(
+          'AI Labor',
+          runaway.isRunaway
+              ? 'Runaway (+${runaway.variancePercentage.round()}%)'
+              : runaway.isCaution
+                  ? 'Caution (+${runaway.variancePercentage.round()}%)'
+                  : 'On Track',
+          runaway.isRunaway
+              ? Tone.bad
+              : runaway.isCaution
+                  ? Tone.warn
+                  : Tone.good,
+          'Projected \$${(runaway.projectedFinalCents / 100).toStringAsFixed(0)} vs budget \$${(runaway.budgetCents / 100).toStringAsFixed(0)} (${runaway.recommendation})',
+        ),
     ];
     return Semantics(
       container: true,

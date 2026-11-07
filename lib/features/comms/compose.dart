@@ -207,6 +207,15 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
                 label: Text(label),
                 onPressed: () => setState(() => _body.text = templateText(text, storefrontName: sfName)),
               ),
+            ActionChip(
+              avatar: const Icon(Icons.translate, size: 16, color: AppColors.good),
+              label: const Text('AI Translate (EN ↔ ES)'),
+              onPressed: () {
+                if (_body.text.trim().isEmpty) return;
+                final translated = IncidentAssistantAI.translateConcourseMessage(_body.text);
+                setState(() => _body.text = translated);
+              },
+            ),
           ],
         ),
         const SizedBox(height: 12),

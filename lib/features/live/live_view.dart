@@ -9,6 +9,7 @@ import '../../core/time/venue_time.dart';
 import '../../core/widgets/common.dart';
 import '../../data/models.dart';
 import '../reports/live_kpi_strip.dart';
+import '../schedule/schedule_actions.dart' show runBoardAction;
 import 'arena_map.dart';
 import 'live_model.dart';
 import 'storefront_sheet.dart';
@@ -242,9 +243,57 @@ class _Attention extends ConsumerWidget {
     for (final c in openPositions) {
       openByStorefront.update(c.shift.storefrontId, (n) => n + 1, ifAbsent: () => 1);
     }
+
+    final moves = LiveRebalanceAI.recommendMoves(
+      event: board.event,
+      shifts: board.shifts,
+      needs: board.needs,
+      storefronts: {for (final s in venue.storefronts) s.id: s},
+      jobRoles: {for (final r in venue.jobRoles) r.code: r},
+      workers: {for (final w in board.workers.values) w.id: w.worker},
+      rules: venue.rules,
+      timeZone: board.timeZone,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (moves.isNotEmpty) ...[
+          SectionHeading('AI Concourse Rebalance Suggestions (${moves.length})'),
+          for (final m in moves)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpace.screen, vertical: 4),
+              child: Card(
+                child: ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.auto_awesome, color: AppColors.good),
+                  title: Text('${m.workerName}: ${venue.storefront(m.fromStorefrontId)?.name ?? m.fromStorefrontId} → ${venue.storefront(m.toStorefrontId)?.name ?? m.toStorefrontId}'),
+                  subtitle: Text('${venue.roleName(m.jobRoleCode)} · ${m.reason}'),
+                  trailing: FilledButton.tonal(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () async {
+                      final shift = board.shifts.where((s) => s.workerId == m.workerId).firstOrNull;
+                      if (shift != null) {
+                        await runBoardAction(
+                          context,
+                          ref,
+                          board.event.id,
+                          'Moved ${m.workerName} to ${venue.storefront(m.toStorefrontId)?.name ?? ''}',
+                          (repo) => repo.move(
+                            shift.id,
+                            m.toStorefrontId,
+                            jobRole: m.jobRoleCode,
+                            reason: 'AI Rebalance: ${m.reason}',
+                          ),
+                        );
+                      }
+                    },
+                    child: const Text('Move'),
+                  ),
+                ),
+              ),
+            ),
+        ],
         if (missing.isNotEmpty) ...[
           SectionHeading('Missing (${missing.length})'),
           for (final c in missing) _row(context, c, 'call ${time.format(atVenue(c.shift.callTime, zone))}, ${c.attendance.minutesPastCall} min ago'),
@@ -259,7 +308,22 @@ class _Attention extends ConsumerWidget {
               subtitle: Text([
                 for (final c in openPositions.where((c) => c.shift.storefrontId == e.key)) venue.roleName(c.shift.jobRoleCode),
               ].join(', ')),
-              trailing: StatusTag('${e.value} open', Tone.bad),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  StatusTag('${e.value} open', Tone.bad),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                    icon: const Icon(Icons.auto_awesome, size: 14),
+                    label: const Text('AI Replacement'),
+                    onPressed: () {
+                      final targetShift = openPositions.where((c) => c.shift.storefrontId == e.key).first.shift;
+                      _showEmergencyReplacementDialog(context, ref, board, venue, targetShift);
+                    },
+                  ),
+                ],
+              ),
               onTap: () => onStorefront(e.key),
             ),
         ],
@@ -309,6 +373,88 @@ class _Attention extends ConsumerWidget {
             ),
         ],
       ],
+    );
+  }
+
+  Future<void> _showEmergencyReplacementDialog(
+    BuildContext context,
+    WidgetRef ref,
+    EventBoard board,
+    VenueContext venue,
+    Shift openShift,
+  ) async {
+    final allWorkers = [
+      for (final w in (ref.read(workersProvider).value ?? const <Worker>[]))
+        if (w.status == 'active') w
+    ];
+    final candidates = LiveRebalanceAI.recommendEmergencyReplacements(
+      openShift: openShift,
+      event: board.event,
+      availableWorkers: allWorkers,
+      allWeeklyShifts: board.shifts,
+      rules: venue.rules,
+      timeZone: board.timeZone,
+    );
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.auto_awesome, color: AppColors.good),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'AI Replacement: ${venue.roleName(openShift.jobRoleCode)} at ${venue.storefront(openShift.storefrontId)?.name ?? ''}',
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 500,
+          height: 380,
+          child: candidates.isEmpty
+              ? const Center(child: Text('No off-duty qualified candidates found with 0 overtime risk.'))
+              : ListView.separated(
+                  itemCount: candidates.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final cand = candidates[i];
+                    return ListTile(
+                      dense: true,
+                      leading: CircleAvatar(
+                        backgroundColor: AppColors.goodSoft,
+                        child: Text(
+                          '${(cand.suitabilityScore * 100).round()}%',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.good),
+                        ),
+                      ),
+                      title: Text(cand.worker.displayName),
+                      subtitle: Text(
+                        '${cand.worker.employeeNumber} · ${(cand.weeklyHoursBeforeShift * 10).round() / 10}h this week\n${cand.reasons.join(', ')}',
+                      ),
+                      isThreeLine: true,
+                      trailing: FilledButton.tonal(
+                        child: const Text('Call In'),
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          await runBoardAction(
+                            context,
+                            ref,
+                            board.event.id,
+                            'Assigned ${cand.worker.displayName}',
+                            (repo) => repo.assign(openShift.id, cand.worker.id),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        ],
+      ),
     );
   }
 

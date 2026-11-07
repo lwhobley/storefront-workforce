@@ -677,4 +677,171 @@ mixin _DemoShiftMarket on _DemoCore implements ShiftMarketRepository {
     final list = await candidates(eventId, jobRole);
     return [for (final c in list) MarketCandidate(worker: c, availability: _smCandidate(eventId, c.id))];
   }
+
+  @override
+  Future<ScheduleOptimizationPlan> generateSmartSchedule(
+    String eventId, {
+    SmartSchedulerConstraints constraints = const SmartSchedulerConstraints(),
+  }) async {
+    _smEnsure();
+    final event = _events[eventId];
+    if (event == null) throw const AppFailure('Event not found');
+    final venue = _arena.venue;
+    final rules = VenueRules.fromJson(venue.settings);
+    final timeZone = venue.timeZone;
+    final eventShifts = _shifts.values.where((s) => s.eventId == eventId).toList();
+    final storefronts = {for (final s in _arena.storefronts) s.id: s};
+    final jobRoles = {for (final r in _arena.jobRoles) r.code: r};
+
+    final weekStart = workweekStart(event.callTime, timeZone, rules.overtime.workweekStartDay);
+    final weekEnd = weekStart.add(const Duration(days: 7));
+
+    final weekHoursByWorker = <String, double>{};
+    for (final s in _shifts.values) {
+      if (s.workerId != null && s.eventId != eventId && s.status == ShiftStatus.assigned) {
+        if (s.callTime.isAfter(weekStart.subtract(const Duration(seconds: 1))) && s.callTime.isBefore(weekEnd)) {
+          final dur = SmartScheduler.estimateShiftHours(_events[s.eventId] ?? event, s);
+          weekHoursByWorker[s.workerId!] = (weekHoursByWorker[s.workerId!] ?? 0.0) + dur;
+        }
+      }
+    }
+
+    final recentWindow = event.callTime.subtract(const Duration(days: 30));
+    final recentCountByWorker = <String, int>{};
+    final recentSfByWorker = <String, List<String>>{};
+    for (final s in _shifts.values.where((s) => s.workerId != null && s.callTime.isAfter(recentWindow) && s.callTime.isBefore(event.callTime))) {
+      recentCountByWorker[s.workerId!] = (recentCountByWorker[s.workerId!] ?? 0) + 1;
+      recentSfByWorker.putIfAbsent(s.workerId!, () => []).add(s.storefrontId);
+    }
+
+    final profiles = <WorkerScheduleProfile>[];
+    final day = localDateOf(event.callTime, timeZone);
+    for (final w in _workers.values.where((w) => w.status == 'active')) {
+      final cand = _smCandidate(eventId, w.id);
+      final availStatus = cand.blackout
+          ? CandidateAvailabilityStatus.blackout
+          : switch (cand.status) {
+              AvailabilityStatus.available => cand.note.toLowerCase().contains('preferred')
+                  ? CandidateAvailabilityStatus.preferred
+                  : CandidateAvailabilityStatus.available,
+              AvailabilityStatus.unavailable => CandidateAvailabilityStatus.unavailable,
+              null => CandidateAvailabilityStatus.noAnswer,
+            };
+
+      profiles.add(WorkerScheduleProfile(
+        worker: w,
+        ageOnEvent: w.ageOn(day),
+        availability: availStatus,
+        availabilityNote: cand.note,
+        currentWeekHours: weekHoursByWorker[w.id] ?? 0.0,
+        recentShiftsCount: recentCountByWorker[w.id] ?? 0,
+        recentStorefrontIds: recentSfByWorker[w.id] ?? const [],
+        reliabilityScore: 95,
+        doNotRehire: false,
+      ));
+    }
+
+    return SmartScheduler.optimize(
+      event: event,
+      shifts: eventShifts,
+      candidateProfiles: profiles,
+      storefronts: storefronts,
+      jobRoles: jobRoles,
+      rules: rules,
+      timeZone: timeZone,
+      constraints: constraints,
+    );
+  }
+
+  @override
+  Future<List<CandidateFitScore>> scoreCandidatesForShift(
+    Shift shift,
+    List<MarketCandidate> candidates, {
+    SmartSchedulerConstraints constraints = const SmartSchedulerConstraints(),
+  }) async {
+    _smEnsure();
+    final event = _events[shift.eventId];
+    if (event == null) return const [];
+    final venue = _arena.venue;
+    final rules = VenueRules.fromJson(venue.settings);
+    final timeZone = venue.timeZone;
+    final role = _arena.jobRoles.where((r) => r.code == shift.jobRoleCode).firstOrNull ??
+        JobRole(venueId: venue.id, code: shift.jobRoleCode, name: shift.jobRoleCode, requiredCertifications: const []);
+
+    final weekStart = workweekStart(event.callTime, timeZone, rules.overtime.workweekStartDay);
+    final weekEnd = weekStart.add(const Duration(days: 7));
+
+    final weekHoursByWorker = <String, double>{};
+    for (final s in _shifts.values) {
+      if (s.workerId != null && s.eventId != event.id && s.status == ShiftStatus.assigned) {
+        if (s.callTime.isAfter(weekStart.subtract(const Duration(seconds: 1))) && s.callTime.isBefore(weekEnd)) {
+          final dur = SmartScheduler.estimateShiftHours(_events[s.eventId] ?? event, s);
+          weekHoursByWorker[s.workerId!] = (weekHoursByWorker[s.workerId!] ?? 0.0) + dur;
+        }
+      }
+    }
+
+    final recentWindow = event.callTime.subtract(const Duration(days: 30));
+    final recentCountByWorker = <String, int>{};
+    final recentSfByWorker = <String, List<String>>{};
+    for (final s in _shifts.values.where((s) => s.workerId != null && s.callTime.isAfter(recentWindow) && s.callTime.isBefore(event.callTime))) {
+      recentCountByWorker[s.workerId!] = (recentCountByWorker[s.workerId!] ?? 0) + 1;
+      recentSfByWorker.putIfAbsent(s.workerId!, () => []).add(s.storefrontId);
+    }
+
+    final scores = <CandidateFitScore>[];
+    for (final m in candidates) {
+      final w = m.worker.worker;
+      final cand = m.availability;
+      final availStatus = cand.blackout
+          ? CandidateAvailabilityStatus.blackout
+          : switch (cand.status) {
+              AvailabilityStatus.available => cand.note.toLowerCase().contains('preferred')
+                  ? CandidateAvailabilityStatus.preferred
+                  : CandidateAvailabilityStatus.available,
+              AvailabilityStatus.unavailable => CandidateAvailabilityStatus.unavailable,
+              null => CandidateAvailabilityStatus.noAnswer,
+            };
+
+      final profile = WorkerScheduleProfile(
+        worker: w,
+        ageOnEvent: m.worker.ageOnEvent,
+        availability: availStatus,
+        availabilityNote: cand.note,
+        currentWeekHours: weekHoursByWorker[w.id] ?? 0.0,
+        recentShiftsCount: recentCountByWorker[w.id] ?? 0,
+        recentStorefrontIds: recentSfByWorker[w.id] ?? const [],
+        reliabilityScore: 95,
+        doNotRehire: false,
+      );
+
+      scores.add(SmartScheduler.evaluateFit(
+        profile: profile,
+        shift: shift,
+        role: role,
+        event: event,
+        rules: rules,
+        timeZone: timeZone,
+        constraints: constraints,
+      ));
+    }
+    return scores;
+  }
+
+  @override
+  Future<int> applySmartSchedule(
+    String eventId,
+    List<ShiftAssignmentProposal> proposals,
+  ) async {
+    _smEnsure();
+    int applied = 0;
+    for (final p in proposals) {
+      final shift = _shifts[p.shiftId];
+      if (shift != null && shift.isOpen) {
+        _smSetWorker(shift, p.workerId, 'AI Smart Schedule auto-assigned');
+        applied++;
+      }
+    }
+    return applied;
+  }
 }

@@ -144,7 +144,7 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
             builder: (context, snap) {
               if (snap.hasError) return ErrorNote(snap.error!);
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-              final rows = <(BoardWorker, AssignmentCheck, CandidateAvailability)>[];
+              final rows = <(BoardWorker, AssignmentCheck, CandidateAvailability, CandidateFitScore)>[];
               for (final m in sortByAvailability(snap.data!)) {
                 final c = m.worker;
                 if (_type != null && c.worker.type != _type) continue;
@@ -164,7 +164,31 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
                   doNotRehireReason: _rehireReasons[c.worker.id],
                 );
                 if (_hideBlocked && check.blocks.isNotEmpty) continue;
-                rows.add((c, check, m.availability));
+                final availStatus = m.availability.blackout
+                    ? CandidateAvailabilityStatus.blackout
+                    : switch (m.availability.status) {
+                        AvailabilityStatus.available => m.availability.note.toLowerCase().contains('preferred')
+                            ? CandidateAvailabilityStatus.preferred
+                            : CandidateAvailabilityStatus.available,
+                        AvailabilityStatus.unavailable => CandidateAvailabilityStatus.unavailable,
+                        null => CandidateAvailabilityStatus.noAnswer,
+                      };
+                final fit = SmartScheduler.evaluateFit(
+                  profile: WorkerScheduleProfile(
+                    worker: c.worker,
+                    ageOnEvent: c.ageOnEvent,
+                    availability: availStatus,
+                    availabilityNote: m.availability.note,
+                    doNotRehire: _rehireReasons.containsKey(c.worker.id),
+                    doNotRehireReason: _rehireReasons[c.worker.id],
+                  ),
+                  shift: widget.shift,
+                  role: widget.role,
+                  event: widget.board.event,
+                  rules: rules,
+                  timeZone: widget.board.timeZone,
+                );
+                rows.add((c, check, m.availability, fit));
               }
               // Blocked people last; then who said they can work, no answer, said they
               // cannot, blackout; then clean candidates before those with warnings.
@@ -172,14 +196,14 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
                 final blocked = (a.$2.blocks.isEmpty ? 0 : 1).compareTo(b.$2.blocks.isEmpty ? 0 : 1);
                 if (blocked != 0) return blocked;
                 final said = a.$3.rank.compareTo(b.$3.rank);
-                return said != 0 ? said : a.$2.warnings.length.compareTo(b.$2.warnings.length);
+                return b.$4.score.compareTo(a.$4.score);
               });
               if (rows.isEmpty) return const EmptyNote('No one available. Turn off "Hide blocked" to see why.');
               return ListView.separated(
                 itemCount: rows.length,
                 separatorBuilder: (_, _) => const Divider(indent: AppSpace.screen),
                 itemBuilder: (context, i) {
-                  final (c, check, said) = rows[i];
+                  final (c, check, said, fit) = rows[i];
                   final w = c.worker;
                   final org = w.type == WorkerType.temp
                       ? widget.venue.agencyName(w.agencyId)
@@ -199,11 +223,14 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
                         StatusTag(workerTypeLabel(w.type), w.type == WorkerType.regular ? Tone.idle : Tone.info),
                         if (c.isMinor(rules.minors.adultAge)) StatusTag('Minor ${c.ageOnEvent}', Tone.warn),
                         ?_availabilityTag(said),
+                        if (fit.eligible)
+                          StatusTag('${fit.score}% Match', fit.score >= 80 ? Tone.good : (fit.score >= 60 ? Tone.warn : Tone.idle), icon: Icons.auto_awesome),
                         ...candidateTags(insights, w.id),
                       ],
                     ),
                     subtitle: Text([
                       '${w.employeeNumber}${org.isEmpty ? '' : ' · $org'}',
+                      if (fit.reasons.isNotEmpty) '✨ ${fit.reasons.take(2).join(' · ')}',
                       if (said.note.isNotEmpty) 'Said: “${said.note}”',
                       for (final b in check.blocks) '⛔ ${b.message}',
                       for (final wn in check.warnings) '⚠ ${wn.message}',

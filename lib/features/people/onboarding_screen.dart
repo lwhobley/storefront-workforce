@@ -11,6 +11,7 @@ import '../../data/people_repository.dart';
 import '../schedule/schedule_actions.dart' show workerTypeLabel;
 import 'people_providers.dart';
 import 'people_widgets.dart';
+import 'ai_card_scan_dialog.dart';
 
 enum _Filter { all, notFinished, needsReview, overdue }
 
@@ -278,6 +279,30 @@ class _StepCardState extends ConsumerState<_StepCard> {
 
   Future<void> _act(Future<void> Function() action, String done) => _run(context, ref, action, done: done, workerId: _workerId);
 
+  void _openAiCardScan(BuildContext context, PendingCert cert, String certName) {
+    final session = ref.read(sessionProvider)!;
+    final worker = Worker(
+      id: widget.state.workerId,
+      venueId: session.venue.id,
+      type: widget.state.workerType,
+      employeeNumber: widget.state.employeeNumber,
+      firstName: widget.state.firstName,
+      lastName: widget.state.lastName,
+      preferredName: widget.state.preferredName,
+    );
+    showDialog<void>(
+      context: context,
+      builder: (_) => AiCardScanDialog(
+        worker: worker,
+        certTypeCode: cert.typeCode,
+        certName: certName,
+        initialNumber: cert.number,
+        initialExpiresOn: cert.expiresOn,
+        onApproved: () => _act(() => ref.people.reviewOnboardingStep(_workerId, widget.step.code, approve: true), 'Card auto-approved by AI'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final step = widget.step;
@@ -345,6 +370,16 @@ class _StepCardState extends ConsumerState<_StepCard> {
                 Text('Number: ${c.number.isEmpty ? '—' : c.number}', style: AppText.meta),
                 Text('Expires: ${c.expiresOn == null ? '—' : shortDate.format(c.expiresOn!)}', style: AppText.meta),
                 const Text('Uploaded, not checked yet', style: TextStyle(color: AppColors.warn, fontWeight: FontWeight.w600, fontSize: 13)),
+                if (widget.canManage)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                      icon: const Icon(Icons.auto_awesome, size: 16),
+                      label: const Text('AI Auto-Scan Card'),
+                      onPressed: () => _openAiCardScan(context, c, venue?.certName(c.typeCode) ?? c.typeCode),
+                    ),
+                  ),
               ]),
             ]),
           ));
